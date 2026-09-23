@@ -20,17 +20,26 @@ st.set_page_config(page_title="HRMS & Payroll Enterprise Cloud", layout="wide")
 
 @st.cache_data(ttl=600)
 def fetch_cached_entities():
-    return supabase.table("entities").select("id, name, code_prefix").execute().data or []
+    try:
+        return supabase.table("entities").select("id, name, code_prefix").execute().data or []
+    except Exception:
+        return []
 
 @st.cache_data(ttl=600)
 def fetch_cached_clients():
-    return supabase.table("clients").select("id, name, client_code, latitude, longitude").execute().data or []
+    try:
+        return supabase.table("clients").select("id, name, client_code, latitude, longitude").execute().data or []
+    except Exception:
+        return []
 
 @st.cache_data(ttl=300)
 def fetch_cached_employees():
-    return supabase.table("employees").select("id, employee_code, full_name, role, designation, status").execute().data or []
+    try:
+        return supabase.table("employees").select("id, employee_code, full_name, role, designation, status").execute().data or []
+    except Exception:
+        return []
 
-# CSS Styling matching clean design & highlight tabs
+# Custom CSS Styling
 st.markdown("""
     <style>
     .main-title { font-size: 24px; font-weight: 700; color: #1E293B; margin-bottom: 12px; }
@@ -44,17 +53,35 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Session State Initialization
+# -------------------------------------------------------------
+# PERSISTENT SESSION HANDLING (Refresh kelyavar logout honar nahi)
+# -------------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
+
+if st.session_state.user is None:
+    saved_user_id = st.query_params.get("session_user_id")
+    saved_role = st.query_params.get("session_role")
+    
+    if saved_user_id and saved_role:
+        if saved_user_id == "admin" and saved_role == "admin":
+            st.session_state.user = {"user_id": "admin", "full_name": "Super Admin", "role": "admin"}
+        else:
+            try:
+                res = supabase.table("employees").select("*").eq("user_id", saved_user_id).eq("role", saved_role).execute()
+                if res.data:
+                    st.session_state.user = res.data[0]
+            except Exception:
+                pass
+
 if "active_admin_tab" not in st.session_state:
     st.session_state.active_admin_tab = "Dashboard Overview"
 
 # -------------------------------------------------------------
-# 2. HELPER FUNCTIONS: LOGOS, PDFS, SHIFT & GEOFENCING
+# 2. HELPER FUNCTIONS: LOGOS, PDFS, CTC & GEOFENCING
 # -------------------------------------------------------------
 def get_entity_logo(entity_name):
-    """Dynamically matches entity name with local logo files."""
+    """Entity chya navavarun local folder madhil logo shodhane"""
     if not entity_name:
         return None
     ent_clean = entity_name.upper()
@@ -68,13 +95,14 @@ def get_entity_logo(entity_name):
         pass
     return None
 
-def generate_official_offer_letter(emp_data, entity_name):
-    """Generates official offer letter PDF with dynamic entity logo."""
+def generate_official_offer_letter(emp_data, entity_name, sal_rule=None):
+    """Offer Letter PDF generate karne with Dynamic Logo and Full CTC Annexure"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=35, leftMargin=35, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
     story = []
 
+    # 1. Dynamic Entity Logo Header
     logo_file = get_entity_logo(entity_name)
     if logo_file and os.path.exists(logo_file):
         try:
@@ -83,27 +111,85 @@ def generate_official_offer_letter(emp_data, entity_name):
         except Exception:
             pass
 
-    title_style = ParagraphStyle(name="OfferTitle", fontName="Helvetica-Bold", fontSize=16, alignment=1, textColor=colors.HexColor("#1E293B"))
-    story.append(Paragraph(f"OFFER LETTER - {entity_name.upper() if entity_name else 'ENTERPRISE'}", title_style))
-    story.append(Spacer(1, 15))
+    title_style = ParagraphStyle(name="OfferTitle", fontName="Helvetica-Bold", fontSize=15, alignment=1, textColor=colors.HexColor("#1E293B"))
+    story.append(Paragraph(f"LETTER OF APPOINTMENT & CTC ANNEXURE", title_style))
+    story.append(Spacer(1, 12))
 
     body_text = f"""
     Date: {date.today()}<br/><br/>
-    Dear <b>{emp_data.get('full_name')}</b>,<br/><br/>
-    We are pleased to offer you the position of <b>{emp_data.get('designation', 'Associate')}</b> with our organization. 
-    Your official employee identification code will be <b>{emp_data.get('employee_code', 'PENDING')}</b>.<br/><br/>
-    Please review your statutory enrollments (PF/ESIC) and bank details linked to your master profile. 
-    We look forward to your valuable contribution to the organization.
+    To, <b>{emp_data.get('full_name')}</b><br/>
+    Designation: <b>{emp_data.get('designation', 'Associate')}</b> | Employee Code: <b>{emp_data.get('employee_code', 'PENDING')}</b><br/><br/>
+    We are pleased to appoint you with <b>{entity_name if entity_name else 'Enterprise'}</b>. 
+    Below is your structured Cost-To-Company (CTC) breakup detailing Monthly Gross earnings, statutory deductions, and Employer overheads.
     """
     story.append(Paragraph(body_text, styles["Normal"]))
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 14))
+
+    # Values extraction
+    basic = float(sal_rule.get("basic", 12000.0)) if sal_rule else 12000.0
+    da = float(sal_rule.get("da", 3000.0)) if sal_rule else 3000.0
+    hra = float(sal_rule.get("hra", 2500.0)) if sal_rule else 2500.0
+    other = float(sal_rule.get("other_allowance", 1000.0)) if sal_rule else 1000.0
+    gross = basic + da + hra + other
+
+    er_pf_pct = float(sal_rule.get("employer_pf_pct", 13.0)) if sal_rule else 13.0
+    er_esic_pct = float(sal_rule.get("employer_esic_pct", 3.25)) if sal_rule else 3.25
+    bonus = float(sal_rule.get("statutory_bonus", 0.0)) if sal_rule else 0.0
+    gratuity = float(sal_rule.get("gratuity_amount", 0.0)) if sal_rule else 0.0
+
+    er_pf_amt = round((basic + da) * (er_pf_pct / 100.0), 2)
+    er_esic_amt = round(gross * (er_esic_pct / 100.0), 2)
+    total_er_contrib = er_pf_amt + er_esic_amt + bonus + gratuity
+    monthly_ctc = gross + total_er_contrib
+    annual_ctc = monthly_ctc * 12
+
+    ee_pf = round((basic + da) * 0.12, 2)
+    ee_esic = round(gross * 0.0075, 2)
+    pt = 200.0
+    net_in_hand = gross - (ee_pf + ee_esic + pt)
+
+    ctc_table_data = [
+        ["Salary Component", "Monthly (₹)", "Annual (₹)"],
+        ["Basic Pay", f"{basic:,.2f}", f"{basic*12:,.2f}"],
+        ["Dearness Allowance (DA)", f"{da:,.2f}", f"{da*12:,.2f}"],
+        ["House Rent Allowance (HRA)", f"{hra:,.2f}", f"{hra*12:,.2f}"],
+        ["Other Allowances", f"{other:,.2f}", f"{other*12:,.2f}"],
+        ["A. GROSS SALARY", f"{gross:,.2f}", f"{gross*12:,.2f}"],
+        [f"Employer PF ({er_pf_pct}%)", f"{er_pf_amt:,.2f}", f"{er_pf_amt*12:,.2f}"],
+        [f"Employer ESIC ({er_esic_pct}%)", f"{er_esic_amt:,.2f}", f"{er_esic_amt*12:,.2f}"],
+        ["Statutory Bonus / Gratuity", f"{bonus + gratuity:,.2f}", f"{(bonus + gratuity)*12:,.2f}"],
+        ["B. EMPLOYER CONTRIBUTIONS", f"{total_er_contrib:,.2f}", f"{total_er_contrib*12:,.2f}"],
+        ["TOTAL COST TO COMPANY (CTC) [A + B]", f"{monthly_ctc:,.2f}", f"{annual_ctc:,.2f}"],
+        ["Employee PF (12%)", f"-{ee_pf:,.2f}", f"-{ee_pf*12:,.2f}"],
+        ["Employee ESIC (0.75%)", f"-{ee_esic:,.2f}", f"-{ee_esic*12:,.2f}"],
+        ["Professional Tax (PT)", f"-{pt:,.2f}", f"-{pt*12:,.2f}"],
+        ["ESTIMATED TAKE-HOME (NET IN-HAND)", f"{net_in_hand:,.2f}", f"{net_in_hand*12:,.2f}"]
+    ]
+
+    t_ctc = Table(ctc_table_data, colWidths=[240, 140, 140])
+    t_ctc.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#0F172A")),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
+        ('FONTSIZE', (0,0), (-1,-1), 8.5),
+        ('BACKGROUND', (0,5), (-1,5), colors.HexColor("#E2E8F0")),
+        ('BACKGROUND', (0,9), (-1,9), colors.HexColor("#E2E8F0")),
+        ('BACKGROUND', (0,10), (-1,10), colors.HexColor("#FEF08A")),
+        ('FONTNAME', (0,10), (-1,10), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(t_ctc)
+    story.append(Spacer(1, 14))
+    story.append(Paragraph("Declaration: Employer statutory contributions are company overheads and will not appear on monthly employee wage slips.", styles["Italic"]))
 
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
 
 def generate_joining_pdf(data):
-    """Generates joining compliance application form."""
+    """Candidate Compliance Application Form"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
@@ -141,26 +227,12 @@ def generate_joining_pdf(data):
     return buffer.getvalue()
 
 def calculate_geofence(lat1, lon1, lat2, lon2):
-    """Validates 15-meter Haversine perimeter."""
     R = 6371000
     p1, p2 = math.radians(lat1), math.radians(lat2)
     d_lat = math.radians(lat2 - lat1)
     d_lon = math.radians(lon2 - lon1)
     a = math.sin(d_lat / 2)**2 + math.cos(p1) * math.cos(p2) * math.sin(d_lon / 2)**2
     return (R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))) <= 15
-
-def calculate_shift_and_ot(punch_in_str, punch_out_str, shift_in_str="08:30", shift_out_str="17:00"):
-    """Calculates actual worked hours and overtime based on shift schedule."""
-    fmt = "%H:%M"
-    p_in = datetime.strptime(punch_in_str, fmt)
-    p_out = datetime.strptime(punch_out_str, fmt)
-    s_in = datetime.strptime(shift_in_str, fmt)
-    s_out = datetime.strptime(shift_out_str, fmt)
-
-    scheduled_shift_hours = (s_out - s_in).total_seconds() / 3600.0
-    actual_worked_hours = (p_out - p_in).total_seconds() / 3600.0
-    ot_hours = max(0.0, round(actual_worked_hours - scheduled_shift_hours, 2))
-    return round(actual_worked_hours, 2), ot_hours
 
 # =============================================================================
 # 3. PUBLIC INTERFACE (Sign In & Candidate Joining Form)
@@ -183,15 +255,19 @@ if not st.session_state.user:
                 role_map = {"Employee (ESS)": "employee", "Admin Portal": "admin", "Supervisor Portal": "supervisor", "Client Desk": "client"}
                 target_role = role_map[role_choice]
                 
-                # Admin direct fallback
+                # Admin direct login
                 if u_id == "admin" and u_pwd == "admin123" and target_role == "admin":
                     st.session_state.user = {"user_id": "admin", "full_name": "Super Admin", "role": "admin"}
+                    st.query_params["session_user_id"] = "admin"
+                    st.query_params["session_role"] = "admin"
                     st.rerun()
                 
                 try:
                     res = supabase.table("employees").select("*").eq("user_id", u_id).eq("password", u_pwd).eq("role", target_role).execute()
                     if res.data:
                         st.session_state.user = res.data[0]
+                        st.query_params["session_user_id"] = str(u_id)
+                        st.query_params["session_role"] = str(target_role)
                         st.rerun()
                     else:
                         st.error("Invalid Credentials or Login Role!")
@@ -277,6 +353,7 @@ else:
             st.write("---")
             if st.button("Logout", key="adm_logout"):
                 st.session_state.user = None
+                st.query_params.clear()
                 st.rerun()
 
         selected_panel = st.session_state.active_admin_tab
@@ -405,7 +482,6 @@ else:
                 sel_emp_label = st.selectbox("Select Employee to Manage Documents", options=list(emp_lookup.keys()))
                 curr_emp = emp_lookup[sel_emp_label]
 
-                # Match employee entity name for dynamic logo
                 curr_ent_name = ""
                 for name, e_id in e_map.items():
                     if e_id == curr_emp.get("entity_id"):
@@ -423,11 +499,21 @@ else:
 
                 v_c1, v_c2 = st.columns(2)
                 with v_c1:
-                    st.markdown("##### 1. Offer Letter (Official with Entity Logo)")
+                    st.markdown("##### 1. Offer Letter (Official with Entity Logo & CTC)")
                     f_off = st.file_uploader("Upload Custom Offer Letter", type=["pdf"], key=f"vault_off_{curr_emp['id']}")
                     if f_off:
                         st.success("Offer letter updated!")
-                    offer_pdf_data = generate_official_offer_letter(curr_emp, curr_ent_name)
+                    
+                    # Fetch salary rule for this employee entity/client
+                    matched_rule = None
+                    try:
+                        s_rules = supabase.table("salary_structures").select("*").eq("entity_id", curr_emp.get("entity_id")).execute().data or []
+                        if s_rules:
+                            matched_rule = s_rules[0]
+                    except Exception:
+                        pass
+
+                    offer_pdf_data = generate_official_offer_letter(curr_emp, curr_ent_name, matched_rule)
                     st.download_button("📥 Download Official Offer Letter (PDF)", data=offer_pdf_data, file_name=f"Offer_Letter_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_o_{curr_emp['id']}")
 
                     st.markdown("##### 3. Aadhaar Card Copy")
@@ -532,28 +618,23 @@ else:
             loc1, loc2 = st.columns(2)
             with loc1:
                 st.subheader("1. Add Firm / Entity")
-                if st.form_submit_button("Save Client & Geofence Details"):
-                        if cl_name and cl_code:
+                with st.form("add_entity_portal_form"):
+                    en_name = st.text_input("Firm / Entity Name (e.g. Sagar Enterprises)")
+                    en_addr = st.text_area("Registered Office Address")
+                    en_gst = st.text_input("GST Number")
+                    en_pref = st.text_input("Code Prefix (e.g. SE, GM, UE)")
+                    if st.form_submit_button("Save Entity"):
+                        if en_name and en_pref:
                             try:
-                                supabase.table("clients").insert({
-                                    "name": cl_name,
-                                    "client_code": cl_code,
-                                    "gst_number": cl_gst,
-                                    "plant_location": cl_full_addr,
-                                    "latitude": cl_lat,
-                                    "longitude": cl_lon,
-                                    "service_charge": cl_charge,
-                                    "contact_person_name": cl_contact_person,
-                                    "contact_person_email": cl_contact_email,
-                                    "entity_id": e_dict.get(assigned_ent)
+                                supabase.table("entities").insert({
+                                    "name": en_name, "address": en_addr, "gst_number": en_gst, "code_prefix": en_pref
                                 }).execute()
                                 st.cache_data.clear()
-                                st.success("Client registered successfully!")
+                                st.success("Entity registered successfully!")
                                 st.rerun()
-                            except Exception as db_err:
-                                st.error(f"Database error: {db_err}")
+                            except Exception as db_e:
+                                st.error(f"Error saving entity: {db_e}")
                         else:
-                            st.error("Client Name and Code are mandatory!")
                             st.error("Name and Code Prefix are required!")
 
             with loc2:
@@ -580,15 +661,24 @@ else:
 
                     if st.form_submit_button("Save Client & Geofence Details"):
                         if cl_name and cl_code:
-                            supabase.table("clients").insert({
-                                "name": cl_name, "client_code": cl_code, "gst_number": cl_gst,
-                                "plant_location": cl_full_addr, "latitude": cl_lat, "longitude": cl_lon,
-                                "service_charge": cl_charge, "contact_person_name": cl_contact_person,
-                                "contact_person_email": cl_contact_email, "entity_id": e_dict.get(assigned_ent)
-                            }).execute()
-                            st.cache_data.clear()
-                            st.success("Client registered successfully!")
-                            st.rerun()
+                            try:
+                                supabase.table("clients").insert({
+                                    "name": cl_name,
+                                    "client_code": cl_code,
+                                    "gst_number": cl_gst,
+                                    "plant_location": cl_full_addr,
+                                    "latitude": cl_lat,
+                                    "longitude": cl_lon,
+                                    "service_charge": cl_charge,
+                                    "contact_person_name": cl_contact_person,
+                                    "contact_person_email": cl_contact_email,
+                                    "entity_id": e_dict.get(assigned_ent)
+                                }).execute()
+                                st.cache_data.clear()
+                                st.success("Client registered successfully!")
+                                st.rerun()
+                            except Exception as db_err:
+                                st.error(f"Database error saving client: {db_err}")
                         else:
                             st.error("Client Name and Code are mandatory!")
 
@@ -638,10 +728,10 @@ else:
             except Exception as e:
                 st.error(f"Error fetching invoices: {e}")
 
-        # 6. Salary Structure Rules
+        # 6. Salary Structure Rules (Full CTC Breakdown)
         elif selected_panel == "Salary Structure Rules":
-            st.subheader("Configure Salary Structure Rules")
-            with st.expander("➕ Define New Salary Structure Rule"):
+            st.subheader("Configure Salary Structure & CTC Rules")
+            with st.expander("➕ Define New Salary Structure Rule (Full CTC Breakdown)", expanded=True):
                 with st.form("salary_rule_form"):
                     sr1, sr2 = st.columns(2)
                     ent_list = fetch_cached_entities()
@@ -651,38 +741,69 @@ else:
 
                     r_ent = sr1.selectbox("Entity / Firm", options=list(ent_opts.keys()) if ent_opts else ["No Entity"])
                     r_cli = sr2.selectbox("Client Site", options=list(cli_opts.keys()) if cli_opts else ["No Client"])
-                    r_desig = sr1.text_input("Designation")
-                    r_cat = sr2.selectbox("Skill Category", ["Skilled", "Semi-Skilled", "Unskilled"])
+                    r_desig = sr1.text_input("Designation (e.g. Machine Operator)")
+                    r_cat = sr2.selectbox("Skill Category", ["Skilled", "Semi-Skilled", "Unskilled", "Highly Skilled"])
 
+                    st.markdown("##### 1. Gross Earnings (Visible on Salary Slip & Offer Letter)")
                     sr3, sr4, sr5, sr6 = st.columns(4)
                     r_basic = sr3.number_input("Basic Pay (₹)", value=12000.0)
                     r_da = sr4.number_input("DA (₹)", value=3000.0)
                     r_hra = sr5.number_input("HRA (₹)", value=2500.0)
                     r_other = sr6.number_input("Other Allowance (₹)", value=1000.0)
+                    calc_gross = r_basic + r_da + r_hra + r_other
 
+                    st.markdown("##### 2. Employee Deductions (Visible on Salary Slip)")
                     sr7, sr8, sr9, sr10 = st.columns(4)
                     r_ot = sr7.number_input("OT Rate / Hour (₹)", value=120.0)
-                    r_pf = sr8.number_input("PF Deduction (%)", value=12.0)
-                    r_esic = sr9.number_input("ESIC Deduction (%)", value=0.75)
+                    r_pf = sr8.number_input("Employee PF (%)", value=12.0)
+                    r_esic = sr9.number_input("Employee ESIC (%)", value=0.75)
                     r_pt = sr10.number_input("PT Amount (₹)", value=200.0)
 
-                    if st.form_submit_button("Save Salary Structure Rule"):
-                        supabase.table("salary_structures").insert({
-                            "entity_id": ent_opts.get(r_ent), "client_id": cli_opts.get(r_cli),
-                            "designation": r_desig, "category": r_cat, "basic": r_basic,
-                            "da": r_da, "hra": r_hra, "other_allowance": r_other,
-                            "ot_rate_per_hour": r_ot, "pf_percentage": r_pf, "esic_percentage": r_esic,
-                            "pt_amount": r_pt
-                        }).execute()
-                        st.success("Salary rule saved successfully!")
-                        st.rerun()
+                    st.markdown("##### 3. Employer Contributions / Company Cost (Visible ONLY on Offer Letter)")
+                    er1, er2, er3, er4 = st.columns(4)
+                    r_er_pf = er1.number_input("Employer PF (%) [EPF+EPS+Admin]", value=13.0)
+                    r_er_esic = er2.number_input("Employer ESIC (%)", value=3.25)
+                    r_bonus = er3.number_input("Monthly Bonus / Statutory (₹)", value=0.0)
+                    r_gratuity = er4.number_input("Gratuity / Insurance (₹)", value=0.0)
+
+                    er_pf_val = round((r_basic + r_da) * (r_er_pf / 100.0), 2)
+                    er_esic_val = round(calc_gross * (r_er_esic / 100.0), 2)
+                    calc_monthly_ctc = round(calc_gross + er_pf_val + er_esic_val + r_bonus + r_gratuity, 2)
+                    calc_annual_ctc = round(calc_monthly_ctc * 12, 2)
+
+                    st.markdown(f"""
+                    <div style="background-color: #F1F5F9; border-left: 4px solid #0284C7; padding: 10px; border-radius: 4px; margin: 10px 0px;">
+                        <b>Gross Wages:</b> ₹{calc_gross:,.2f}/month | 
+                        <b>Employer PF:</b> ₹{er_pf_val:,.2f} | 
+                        <b>Employer ESIC:</b> ₹{er_esic_val:,.2f}<br>
+                        <b>Total Monthly CTC:</b> ₹{calc_monthly_ctc:,.2f} | 
+                        <b>Total Annual CTC:</b> ₹{calc_annual_ctc:,.2f}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if st.form_submit_button("Save Full CTC Salary Rule", type="primary"):
+                        try:
+                            supabase.table("salary_structures").insert({
+                                "entity_id": ent_opts.get(r_ent), "client_id": cli_opts.get(r_cli),
+                                "designation": r_desig, "category": r_cat, "basic": r_basic,
+                                "da": r_da, "hra": r_hra, "other_allowance": r_other,
+                                "ot_rate_per_hour": r_ot, "pf_percentage": r_pf, "esic_percentage": r_esic,
+                                "pt_amount": r_pt,
+                                "employer_pf_pct": r_er_pf, "employer_esic_pct": r_er_esic,
+                                "statutory_bonus": r_bonus, "gratuity_amount": r_gratuity,
+                                "monthly_ctc": calc_monthly_ctc, "annual_ctc": calc_annual_ctc
+                            }).execute()
+                            st.success("Salary structure rule saved successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving salary structure: {e}")
 
             st.write("---")
             sal_res = supabase.table("salary_structures").select("*").execute().data or []
             if sal_res:
                 st.dataframe(pd.DataFrame(sal_res), use_container_width=True)
 
-        # 7. Attendance & OT Live Edit (Includes Shift Timings & Live OT Calculation)
+        # 7. Attendance & OT Live Edit
         elif selected_panel == "Attendance & OT Live Edit":
             st.subheader("Manual Attendance, Shift Timings & OT Management")
 
@@ -718,11 +839,14 @@ else:
                     if emp_map:
                         emp_id = emp_map[sel_emp]
                         status_code = sel_status[:sel_status.find(" ")]
-                        supabase.table("attendance").upsert({
-                            "employee_id": emp_id, "date": str(sel_date), "status": status_code,
-                            "ot_hours": ot_hrs, "is_valid_geo": geo_valid
-                        }, on_conflict="employee_id,date").execute()
-                        st.success(f"Attendance for {sel_emp} updated to {status_code} with {ot_hrs} hrs OT!")
+                        try:
+                            supabase.table("attendance").upsert({
+                                "employee_id": emp_id, "date": str(sel_date), "status": status_code,
+                                "ot_hours": ot_hrs, "is_valid_geo": geo_valid
+                            }, on_conflict="employee_id,date").execute()
+                            st.success(f"Attendance for {sel_emp} updated to {status_code} with {ot_hrs} hrs OT!")
+                        except Exception as e:
+                            st.error(f"Error updating attendance: {e}")
 
         # 8. Candidate Approvals
         elif selected_panel == "Candidate Approvals":
@@ -765,14 +889,17 @@ else:
                     assigned_client = rc3.selectbox("Assign Client Site", options=list(cli_m.keys()) if cli_m else ["No Client"])
 
                     if st.form_submit_button("Create User Access"):
-                        supabase.table("employees").insert({
-                            "user_id": new_u, "password": new_p, "full_name": new_n,
-                            "phone_number": new_ph if new_ph else "0000000000",
-                            "role": new_r, "client_id": cli_m.get(assigned_client), "status": "APPROVED"
-                        }).execute()
-                        st.cache_data.clear()
-                        st.success("User access granted!")
-                        st.rerun()
+                        try:
+                            supabase.table("employees").insert({
+                                "user_id": new_u, "password": new_p, "full_name": new_n,
+                                "phone_number": new_ph if new_ph else "0000000000",
+                                "role": new_r, "client_id": cli_m.get(assigned_client), "status": "APPROVED"
+                            }).execute()
+                            st.cache_data.clear()
+                            st.success("User access granted!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error creating user: {e}")
 
             st.write("---")
             users_res = supabase.table("employees").select("id, role, user_id, full_name, phone_number, status").execute().data or []
@@ -809,11 +936,13 @@ else:
     # 4.2 SUPERVISOR PORTAL
     # -------------------------------------------------------------------------
     elif active_role == "supervisor":
-        st.sidebar.title("Supervisor Desk")
-        st.sidebar.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
-        if st.sidebar.button("Logout"):
-            st.session_state.user = None
-            st.rerun()
+        with st.sidebar:
+            st.sidebar.title("Supervisor Desk")
+            st.sidebar.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
+            if st.sidebar.button("Logout", key="sup_logout"):
+                st.session_state.user = None
+                st.query_params.clear()
+                st.rerun()
 
         st.subheader("New Joinee Candidate Verification")
         cand_list = supabase.table("employees").select("*").eq("status", "PENDING_SUPERVISOR").execute().data or []
@@ -833,10 +962,12 @@ else:
     # 4.3 CLIENT PORTAL
     # -------------------------------------------------------------------------
     elif active_role == "client":
-        st.sidebar.title("Client Portal")
-        if st.sidebar.button("Logout"):
-            st.session_state.user = None
-            st.rerun()
+        with st.sidebar:
+            st.sidebar.title("Client Portal")
+            if st.sidebar.button("Logout", key="cli_logout"):
+                st.session_state.user = None
+                st.query_params.clear()
+                st.rerun()
         st.subheader("Live Plant Workforce Dashboard")
         col_c1, col_c2, col_c3 = st.columns(3)
         col_c1.metric("Total Deployed Workforce", "0 Employees")
@@ -844,15 +975,17 @@ else:
         col_c3.metric("Absent Today", "0")
 
     # -------------------------------------------------------------------------
-    # 4.4 EMPLOYEE PORTAL (ESS - 15m Geofenced Punch, Documents & Advance)
+    # 4.4 EMPLOYEE PORTAL (ESS)
     # -------------------------------------------------------------------------
     elif active_role == "employee":
         emp = st.session_state.user
-        st.sidebar.markdown(f"### {emp.get('full_name')}")
-        st.sidebar.caption(f"Employee ID: **{emp.get('employee_code', 'TEMP')}**")
-        if st.sidebar.button("Logout"):
-            st.session_state.user = None
-            st.rerun()
+        with st.sidebar:
+            st.sidebar.markdown(f"### {emp.get('full_name')}")
+            st.sidebar.caption(f"Employee ID: **{emp.get('employee_code', 'TEMP')}**")
+            if st.sidebar.button("Logout", key="emp_logout"):
+                st.session_state.user = None
+                st.query_params.clear()
+                st.rerun()
 
         st.subheader("Daily Attendance (15-Meter Geofenced Punch)")
         emp_lat = st.number_input("Current Latitude", format="%.6f", value=18.651205)
