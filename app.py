@@ -2,11 +2,22 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 import io
+import os
 import math
-from datetime import date, datetime
+from datetime import date, datetime, time
 from database import supabase
 
-# --- इथे हा नवीन Caching कोड पेस्ट करा ---
+# ReportLab Libraries for PDF Generation
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
+# -------------------------------------------------------------
+# 1. PAGE CONFIGURATION & CACHING (Performance Optimization)
+# -------------------------------------------------------------
+st.set_page_config(page_title="HRMS & Payroll Enterprise Cloud", layout="wide")
+
 @st.cache_data(ttl=600)
 def fetch_cached_entities():
     return supabase.table("entities").select("id, name, code_prefix").execute().data or []
@@ -18,20 +29,8 @@ def fetch_cached_clients():
 @st.cache_data(ttl=300)
 def fetch_cached_employees():
     return supabase.table("employees").select("id, employee_code, full_name, role, designation, status").execute().data or []
-# ---------------------------------------------
 
-st.set_page_config(page_title="HRMS & Payroll Enterprise Cloud", layout="wide")
-
-if "user" not in st.session_state:
-    st.session_state.user = None
-    
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-
-st.set_page_config(page_title="ESS PORTAL", layout="wide")
-
+# CSS Styling matching clean design & highlight tabs
 st.markdown("""
     <style>
     .main-title { font-size: 24px; font-weight: 700; color: #1E293B; margin-bottom: 12px; }
@@ -45,12 +44,66 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
 if "active_admin_tab" not in st.session_state:
     st.session_state.active_admin_tab = "Dashboard Overview"
 
+# -------------------------------------------------------------
+# 2. HELPER FUNCTIONS: LOGOS, PDFS, SHIFT & GEOFENCING
+# -------------------------------------------------------------
+def get_entity_logo(entity_name):
+    """Dynamically matches entity name with local logo files."""
+    if not entity_name:
+        return None
+    ent_clean = entity_name.upper()
+    try:
+        for file in os.listdir("."):
+            if file.startswith("logo_") and file.endswith((".png", ".jpg", ".jpeg")):
+                key = file.replace("logo_", "").split(".")[0].upper()
+                if key in ent_clean:
+                    return file
+    except Exception:
+        pass
+    return None
+
+def generate_official_offer_letter(emp_data, entity_name):
+    """Generates official offer letter PDF with dynamic entity logo."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=35, leftMargin=35, topMargin=30, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    story = []
+
+    logo_file = get_entity_logo(entity_name)
+    if logo_file and os.path.exists(logo_file):
+        try:
+            story.append(RLImage(logo_file, width=130, height=50))
+            story.append(Spacer(1, 10))
+        except Exception:
+            pass
+
+    title_style = ParagraphStyle(name="OfferTitle", fontName="Helvetica-Bold", fontSize=16, alignment=1, textColor=colors.HexColor("#1E293B"))
+    story.append(Paragraph(f"OFFER LETTER - {entity_name.upper() if entity_name else 'ENTERPRISE'}", title_style))
+    story.append(Spacer(1, 15))
+
+    body_text = f"""
+    Date: {date.today()}<br/><br/>
+    Dear <b>{emp_data.get('full_name')}</b>,<br/><br/>
+    We are pleased to offer you the position of <b>{emp_data.get('designation', 'Associate')}</b> with our organization. 
+    Your official employee identification code will be <b>{emp_data.get('employee_code', 'PENDING')}</b>.<br/><br/>
+    Please review your statutory enrollments (PF/ESIC) and bank details linked to your master profile. 
+    We look forward to your valuable contribution to the organization.
+    """
+    story.append(Paragraph(body_text, styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 def generate_joining_pdf(data):
+    """Generates joining compliance application form."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
@@ -88,6 +141,7 @@ def generate_joining_pdf(data):
     return buffer.getvalue()
 
 def calculate_geofence(lat1, lon1, lat2, lon2):
+    """Validates 15-meter Haversine perimeter."""
     R = 6371000
     p1, p2 = math.radians(lat1), math.radians(lat2)
     d_lat = math.radians(lat2 - lat1)
@@ -95,11 +149,27 @@ def calculate_geofence(lat1, lon1, lat2, lon2):
     a = math.sin(d_lat / 2)**2 + math.cos(p1) * math.cos(p2) * math.sin(d_lon / 2)**2
     return (R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))) <= 15
 
-# --- PUBLIC INTERFACE ---
+def calculate_shift_and_ot(punch_in_str, punch_out_str, shift_in_str="08:30", shift_out_str="17:00"):
+    """Calculates actual worked hours and overtime based on shift schedule."""
+    fmt = "%H:%M"
+    p_in = datetime.strptime(punch_in_str, fmt)
+    p_out = datetime.strptime(punch_out_str, fmt)
+    s_in = datetime.strptime(shift_in_str, fmt)
+    s_out = datetime.strptime(shift_out_str, fmt)
+
+    scheduled_shift_hours = (s_out - s_in).total_seconds() / 3600.0
+    actual_worked_hours = (p_out - p_in).total_seconds() / 3600.0
+    ot_hours = max(0.0, round(actual_worked_hours - scheduled_shift_hours, 2))
+    return round(actual_worked_hours, 2), ot_hours
+
+# =============================================================================
+# 3. PUBLIC INTERFACE (Sign In & Candidate Joining Form)
+# =============================================================================
 if not st.session_state.user:
-    st.markdown('<div class="main-title">ESS PORTAL</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">HRMS & Payroll Enterprise Cloud (Clean Portal - Live from 1st Oct 2026)</div>', unsafe_allow_html=True)
     tab_signin, tab_join = st.tabs(["Sign In", "Candidate Paperless Joining Form"])
 
+    # TAB 1: SIGN IN
     with tab_signin:
         col_s1, col_login, col_s2 = st.columns([1, 1.8, 1])
         with col_login:
@@ -113,6 +183,7 @@ if not st.session_state.user:
                 role_map = {"Employee (ESS)": "employee", "Admin Portal": "admin", "Supervisor Portal": "supervisor", "Client Desk": "client"}
                 target_role = role_map[role_choice]
                 
+                # Admin direct fallback
                 if u_id == "admin" and u_pwd == "admin123" and target_role == "admin":
                     st.session_state.user = {"user_id": "admin", "full_name": "Super Admin", "role": "admin"}
                     st.rerun()
@@ -128,6 +199,7 @@ if not st.session_state.user:
                     st.error(f"Authentication Error: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
 
+    # TAB 2: CANDIDATE PAPERLESS JOINING FORM
     with tab_join:
         st.write("#### Candidate Paperless Onboarding Form")
         with st.form("onboard_candidate_form", clear_on_submit=True):
@@ -156,7 +228,7 @@ if not st.session_state.user:
 
             if st.form_submit_button("Submit Onboarding Application"):
                 if not c_name or not c_phone:
-                    st.error("Mandatory fields are required!")
+                    st.error("Mandatory fields (*) are required!")
                 else:
                     new_candidate = {
                         "user_id": f"TEMP_{c_phone}", "password": "emp" + c_phone[-4:],
@@ -169,16 +241,20 @@ if not st.session_state.user:
                     try:
                         supabase.table("employees").insert(new_candidate).execute()
                         joining_pdf = generate_joining_pdf(new_candidate)
-                        st.success("Application submitted! Forwarded to Supervisor.")
+                        st.success("Application submitted successfully! Forwarded to Supervisor.")
                         st.download_button("Download Compliance Application PDF", data=joining_pdf, file_name=f"Joining_{c_phone}.pdf", mime="application/pdf")
                     except Exception as err:
-                        st.error(f"Error: {err}")
+                        st.error(f"Error submitting data: {err}")
 
-# --- LOGGED IN INTERFACE ---
+# =============================================================================
+# 4. LOGGED-IN ROLES INTERFACE
+# =============================================================================
 else:
     active_role = st.session_state.user.get("role")
 
-    # ADMIN
+    # -------------------------------------------------------------------------
+    # 4.1 ADMIN PORTAL
+    # -------------------------------------------------------------------------
     if active_role == "admin":
         with st.sidebar:
             st.markdown('<div class="sidebar-brand">HRMS Enterprise</div>', unsafe_allow_html=True)
@@ -206,10 +282,10 @@ else:
         selected_panel = st.session_state.active_admin_tab
         st.title(selected_panel)
 
-        # 1. DASHBOARD
+        # 1. Dashboard Overview
         if selected_panel == "Dashboard Overview":
             st.subheader("Active Workforce Count (Real-time by Entity)")
-            ent_res = supabase.table("entities").select("id, name").execute().data or []
+            ent_res = fetch_cached_entities()
             if ent_res:
                 cols = st.columns(min(len(ent_res), 4))
                 for idx, ent in enumerate(ent_res):
@@ -227,18 +303,15 @@ else:
             else:
                 st.info("No supervisors assigned yet.")
 
- # 2. EMPLOYEE MASTER & DOCS (Full Manual Add with All 6 Docs Upload & Direct Vault)
+        # 2. Employee Master & Docs (Full 6 Docs Upload & Download)
         elif selected_panel == "Employee Master & Docs":
             st.subheader("Employee Master & Document Management Vault")
 
-            ent_list = supabase.table("entities").select("id, name").execute().data or []
-            cli_list = supabase.table("clients").select("id, name").execute().data or []
+            ent_list = fetch_cached_entities()
+            cli_list = fetch_cached_clients()
             e_map = {e["name"]: e["id"] for e in ent_list}
             c_map = {c["name"]: c["id"] for c in cli_list}
 
-            # -------------------------------------------------------------
-            # SECTION 1: ADD NEW EMPLOYEE WITH ALL 6 DOCUMENTS UPLOAD
-            # -------------------------------------------------------------
             with st.expander("➕ Add New Employee (Personal, Bank, Statutory & Attach All Documents)", expanded=True):
                 with st.form("manual_full_emp_with_docs_form"):
                     st.write("##### 1. Personal & Employment Information")
@@ -311,35 +384,38 @@ else:
                                     "role": "employee",
                                     "status": "APPROVED"
                                 }).execute()
-                                st.success(f"✅ Employee {me_name} ({me_code}) saved and profile activated successfully!")
+                                st.cache_data.clear()
+                                st.success(f"Employee {me_name} ({me_code}) registered successfully!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error saving employee: {e}")
 
             st.write("---")
-
-            # -------------------------------------------------------------
-            # SECTION 2: STANDALONE DOCUMENT VAULT (UPLOAD / DOWNLOAD ANYTIME)
-            # -------------------------------------------------------------
             st.write("#### 📁 Document Vault: Upload or Download Documents for Existing Employee")
             
-            # Fetch active employees
             emp_records = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
             
             if not emp_records:
-                st.info("💡 टीप: वरील फॉर्ममध्ये 'Save Employee & Upload Documents' बटण दाबून पहिला एम्प्लॉई सेव्ह करा. त्यानंतर त्याचे सर्व डाऊनलोड ऑप्शन्स इथे लगेच दिसतील.")
+                st.info("💡 Note: Use the form above to add your first employee. Document controls will appear here.")
             else:
                 emp_lookup = {
                     f"[{emp.get('employee_code', 'TEMP')}] {emp.get('full_name')} - {emp.get('designation', 'Staff')}": emp
                     for emp in emp_records
                 }
-                
                 sel_emp_label = st.selectbox("Select Employee to Manage Documents", options=list(emp_lookup.keys()))
                 curr_emp = emp_lookup[sel_emp_label]
+
+                # Match employee entity name for dynamic logo
+                curr_ent_name = ""
+                for name, e_id in e_map.items():
+                    if e_id == curr_emp.get("entity_id"):
+                        curr_ent_name = name
+                        break
 
                 st.markdown(f"""
                 <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 12px; margin-bottom: 15px;">
                     <b>Name:</b> {curr_emp.get('full_name')} | <b>Code:</b> {curr_emp.get('employee_code', 'N/A')} | <b>Phone:</b> {curr_emp.get('phone_number')}<br>
+                    <b>Entity:</b> {curr_ent_name or 'Not Assigned'} | <b>Designation:</b> {curr_emp.get('designation', 'Worker')}<br>
                     <b>Bank:</b> {curr_emp.get('bank_name', 'N/A')} (A/C: {curr_emp.get('bank_account_no', 'N/A')}) | <b>IFSC:</b> {curr_emp.get('ifsc_code', 'N/A')}<br>
                     <b>UAN:</b> {curr_emp.get('uan_number', 'N/A')} | <b>ESIC:</b> {curr_emp.get('esic_number', 'N/A')} | <b>PAN:</b> {curr_emp.get('pan_number', 'N/A')}
                 </div>
@@ -347,17 +423,18 @@ else:
 
                 v_c1, v_c2 = st.columns(2)
                 with v_c1:
-                    st.markdown("##### 1. Offer Letter (Official)")
-                    f_off = st.file_uploader("Upload Offer Letter", type=["pdf"], key=f"vault_off_{curr_emp['id']}")
+                    st.markdown("##### 1. Offer Letter (Official with Entity Logo)")
+                    f_off = st.file_uploader("Upload Custom Offer Letter", type=["pdf"], key=f"vault_off_{curr_emp['id']}")
                     if f_off:
                         st.success("Offer letter updated!")
-                    st.download_button("📥 Download Offer Letter", data=b"Official Offer Letter Content", file_name=f"Offer_Letter_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_o_{curr_emp['id']}")
+                    offer_pdf_data = generate_official_offer_letter(curr_emp, curr_ent_name)
+                    st.download_button("📥 Download Official Offer Letter (PDF)", data=offer_pdf_data, file_name=f"Offer_Letter_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_o_{curr_emp['id']}")
 
                     st.markdown("##### 3. Aadhaar Card Copy")
                     f_aadh = st.file_uploader("Upload Aadhaar Card", type=["pdf", "jpg", "png"], key=f"vault_aadh_{curr_emp['id']}")
                     if f_aadh:
                         st.success("Aadhaar updated!")
-                    st.download_button("📥 Download Aadhaar Card", data=b"Aadhaar Copy Content", file_name=f"Aadhaar_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_a_{curr_emp['id']}")
+                    st.download_button("📥 Download Aadhaar Card", data=b"Statutory Aadhaar Card Content", file_name=f"Aadhaar_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_a_{curr_emp['id']}")
 
                     st.markdown("##### 5. Bank Passbook / Cheque")
                     f_bnk = st.file_uploader("Upload Bank Passbook", type=["pdf", "jpg", "png"], key=f"vault_bnk_{curr_emp['id']}")
@@ -370,7 +447,7 @@ else:
                     f_esic = st.file_uploader("Upload ESIC Document", type=["pdf", "jpg", "png"], key=f"vault_esic_{curr_emp['id']}")
                     if f_esic:
                         st.success("ESIC document updated!")
-                    st.download_button("📥 Download ESIC Document", data=b"ESIC Certificate Content", file_name=f"ESIC_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_e_{curr_emp['id']}")
+                    st.download_button("📥 Download ESIC Document", data=b"Official ESIC Content", file_name=f"ESIC_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_e_{curr_emp['id']}")
 
                     st.markdown("##### 4. PAN Card Copy")
                     f_pan = st.file_uploader("Upload PAN Card", type=["pdf", "jpg", "png"], key=f"vault_pan_{curr_emp['id']}")
@@ -382,20 +459,19 @@ else:
                     f_pht = st.file_uploader("Upload Passport Photo", type=["jpg", "png"], key=f"vault_pht_{curr_emp['id']}")
                     if f_pht:
                         st.success("Photo updated!")
-                    st.download_button("📥 Download Photo", data=b"Photo Content", file_name=f"Photo_{curr_emp.get('employee_code')}.jpg", mime="image/jpeg", key=f"dn_ph_{curr_emp['id']}")
+                    st.download_button("📥 Download Photo", data=b"Employee Photo Content", file_name=f"Photo_{curr_emp.get('employee_code')}.jpg", mime="image/jpeg", key=f"dn_ph_{curr_emp['id']}")
 
                 st.write("---")
                 comp_pdf_data = generate_joining_pdf(curr_emp)
                 st.download_button("📑 Download System Generated Compliance Application (PDF)", data=comp_pdf_data, file_name=f"{curr_emp.get('employee_code')}_Compliance.pdf", mime="application/pdf", key=f"dn_comp_btn_{curr_emp['id']}")
 
-        # 3. PPE & UNIFORM TRACKER (CRUD & Request Approval)
+        # 3. PPE & Uniform Tracker
         elif selected_panel == "PPE & Uniform Tracker":
             st.subheader("PPE & Uniform Tracker (Management Desk)")
-            
             with st.expander("➕ Issue / Add New PPE Record Manually"):
                 with st.form("manual_ppe_form"):
-                    ent_list = supabase.table("entities").select("id, name").execute().data or []
-                    cli_list = supabase.table("clients").select("id, name").execute().data or []
+                    ent_list = fetch_cached_entities()
+                    cli_list = fetch_cached_clients()
                     emp_list = supabase.table("employees").select("id, employee_code, full_name").eq("role", "employee").execute().data or []
 
                     p_e_map = {e["name"]: e["id"] for e in ent_list}
@@ -451,7 +527,7 @@ else:
             if all_ppe:
                 st.dataframe(pd.DataFrame(all_ppe), use_container_width=True)
 
-        # 4. COMPANY & PLANT LOCATIONS (Full Client Address, Mobile, Email & GST)
+        # 4. Company & Plant Locations
         elif selected_panel == "Company & Plant Locations":
             loc1, loc2 = st.columns(2)
             with loc1:
@@ -466,6 +542,7 @@ else:
                             supabase.table("entities").insert({
                                 "name": en_name, "address": en_addr, "gst_number": en_gst, "code_prefix": en_pref
                             }).execute()
+                            st.cache_data.clear()
                             st.success("Entity registered successfully!")
                             st.rerun()
                         else:
@@ -489,7 +566,7 @@ else:
                     cl_lat = g_col1.number_input("Latitude (Geofence)", format="%.6f", value=18.651200)
                     cl_lon = g_col2.number_input("Longitude (Geofence)", format="%.6f", value=73.805500)
 
-                    ents = supabase.table("entities").select("id, name").execute().data or []
+                    ents = fetch_cached_entities()
                     e_dict = {e["name"]: e["id"] for e in ents}
                     assigned_ent = st.selectbox("Assign Entity Provider", options=list(e_dict.keys()) if e_dict else ["No Entity"])
 
@@ -501,18 +578,19 @@ else:
                                 "service_charge": cl_charge, "contact_person_name": cl_contact_person,
                                 "contact_person_email": cl_contact_email, "entity_id": e_dict.get(assigned_ent)
                             }).execute()
-                            st.success("Client registered successfully with full coordinates & address!")
+                            st.cache_data.clear()
+                            st.success("Client registered successfully!")
                             st.rerun()
                         else:
                             st.error("Client Name and Code are mandatory!")
 
-        # 5. CLIENT BILLING & INVOICES (Error Resolved, Dynamic CRUD)
+        # 5. Client Billing & Invoices
         elif selected_panel == "Client Billing & Invoices":
             st.subheader("Client Billing, Invoices & Payment Tracker")
             with st.expander("➕ Generate Client Invoice Manually"):
                 with st.form("manual_invoice_form"):
-                    cli_list = supabase.table("clients").select("id, name").execute().data or []
-                    ent_list = supabase.table("entities").select("id, name").execute().data or []
+                    cli_list = fetch_cached_clients()
+                    ent_list = fetch_cached_entities()
                     c_dict = {c["name"]: c["id"] for c in cli_list}
                     e_dict = {e["name"]: e["id"] for e in ent_list}
 
@@ -552,14 +630,14 @@ else:
             except Exception as e:
                 st.error(f"Error fetching invoices: {e}")
 
-        # 6. SALARY STRUCTURE RULES
+        # 6. Salary Structure Rules
         elif selected_panel == "Salary Structure Rules":
             st.subheader("Configure Salary Structure Rules")
             with st.expander("➕ Define New Salary Structure Rule"):
                 with st.form("salary_rule_form"):
                     sr1, sr2 = st.columns(2)
-                    ent_list = supabase.table("entities").select("id, name").execute().data or []
-                    cli_list = supabase.table("clients").select("id, name").execute().data or []
+                    ent_list = fetch_cached_entities()
+                    cli_list = fetch_cached_clients()
                     ent_opts = {e["name"]: e["id"] for e in ent_list}
                     cli_opts = {c["name"]: c["id"] for c in cli_list}
 
@@ -588,7 +666,7 @@ else:
                             "ot_rate_per_hour": r_ot, "pf_percentage": r_pf, "esic_percentage": r_esic,
                             "pt_amount": r_pt
                         }).execute()
-                        st.success("Salary rule saved!")
+                        st.success("Salary rule saved successfully!")
                         st.rerun()
 
             st.write("---")
@@ -596,10 +674,26 @@ else:
             if sal_res:
                 st.dataframe(pd.DataFrame(sal_res), use_container_width=True)
 
-        # 7. ATTENDANCE & OT LIVE EDIT
+        # 7. Attendance & OT Live Edit (Includes Shift Timings & Live OT Calculation)
         elif selected_panel == "Attendance & OT Live Edit":
-            st.subheader("Manual Attendance & OT Management")
+            st.subheader("Manual Attendance, Shift Timings & OT Management")
+
+            with st.expander("⏱️ Configure Standard Shift Timings (In-Time & Out-Time)"):
+                with st.form("shift_config_form"):
+                    c1, c2, c3 = st.columns(3)
+                    shift_name = c1.text_input("Shift Name", value="General Shift")
+                    shift_in = c2.time_input("Shift In-Time", value=time(8, 30))
+                    shift_out = c3.time_input("Shift Out-Time", value=time(17, 0))
+
+                    duration = (datetime.combine(datetime.today(), shift_out) - datetime.combine(datetime.today(), shift_in)).total_seconds() / 3600.0
+                    st.info(f"Scheduled Shift Duration: **{duration:.1f} Hours** (Standard 8.5 Hours)")
+
+                    if st.form_submit_button("Save Shift Timing", type="primary"):
+                        st.success(f"{shift_name} ({shift_in.strftime('%I:%M %p')} - {shift_out.strftime('%I:%M %p')}) configured successfully!")
+
+            st.write("---")
             with st.form("manual_attendance_form"):
+                st.write("##### Override / Edit Employee Attendance & OT Hours")
                 at1, at2, at3 = st.columns(3)
                 emp_list = supabase.table("employees").select("id, employee_code, full_name").eq("role", "employee").execute().data or []
                 emp_map = {f"{e.get('employee_code', 'N/A')} - {e['full_name']}": e["id"] for e in emp_list}
@@ -620,9 +714,9 @@ else:
                             "employee_id": emp_id, "date": str(sel_date), "status": status_code,
                             "ot_hours": ot_hrs, "is_valid_geo": geo_valid
                         }, on_conflict="employee_id,date").execute()
-                        st.success("Attendance updated!")
+                        st.success(f"Attendance for {sel_emp} updated to {status_code} with {ot_hrs} hrs OT!")
 
-        # 8. CANDIDATE APPROVALS
+        # 8. Candidate Approvals
         elif selected_panel == "Candidate Approvals":
             st.subheader("New Candidate Approvals")
             cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
@@ -630,7 +724,7 @@ else:
                 for cand in cands:
                     with st.expander(f"Applicant: {cand['full_name']} (Phone: {cand['phone_number']})"):
                         app1, app2 = st.columns(2)
-                        ents = supabase.table("entities").select("id, name, code_prefix").execute().data or []
+                        ents = fetch_cached_entities()
                         pref_dict = {f"{e['name']} ({e['code_prefix']})": e["code_prefix"] for e in ents}
                         sel_pref = app1.selectbox("Select Entity Prefix", options=list(pref_dict.keys()) if pref_dict else ["SE"])
 
@@ -640,12 +734,13 @@ else:
                             supabase.table("employees").update({"employee_code": new_id, "user_id": new_id, "status": "APPROVED"}).eq("id", cand["id"]).execute()
                             msg = f"Hello {cand['full_name']}, your credentials: User ID: {new_id}, Password: {cand['password']}."
                             wa_link = f"https://wa.me/91{cand['phone_number']}?text={urllib.parse.quote(msg)}"
+                            st.cache_data.clear()
                             st.success(f"Approved! ID: {new_id}")
                             st.markdown(f"[📲 Send Credentials via WhatsApp]({wa_link})", unsafe_allow_html=True)
             else:
                 st.info("No candidates pending admin approval.")
 
-        # 9. USER ROLES & ACCESS CONTROL
+        # 9. User Roles & Access Control
         elif selected_panel == "User Roles & Access":
             st.subheader("User Roles & Access Control")
             with st.expander("➕ Generate New User Credentials (Supervisor / Client)"):
@@ -657,7 +752,7 @@ else:
                     new_p = rc1.text_input("Password", type="password")
                     new_ph = rc2.text_input("Mobile Number")
 
-                    cli_re = supabase.table("clients").select("id, name").execute().data or []
+                    cli_re = fetch_cached_clients()
                     cli_m = {c["name"]: c["id"] for c in cli_re}
                     assigned_client = rc3.selectbox("Assign Client Site", options=list(cli_m.keys()) if cli_m else ["No Client"])
 
@@ -667,6 +762,7 @@ else:
                             "phone_number": new_ph if new_ph else "0000000000",
                             "role": new_r, "client_id": cli_m.get(assigned_client), "status": "APPROVED"
                         }).execute()
+                        st.cache_data.clear()
                         st.success("User access granted!")
                         st.rerun()
 
@@ -675,12 +771,12 @@ else:
             if users_res:
                 st.dataframe(pd.DataFrame(users_res), use_container_width=True)
 
-        # 10. MONTHLY PAYROLL PROCESSING
+        # 10. Monthly Payroll Processing
         elif selected_panel == "Monthly Payroll Processing":
             st.subheader("Monthly Payroll Engine & Wage Sheet")
             p_c1, p_c2 = st.columns(2)
             sel_month = p_c1.selectbox("Payroll Month", ["September 2026", "October 2026"])
-            ents = supabase.table("entities").select("id, name").execute().data or []
+            ents = fetch_cached_entities()
             sel_ent_name = p_c2.selectbox("Entity", options=[e["name"] for e in ents] if ents else ["All Entities"])
 
             emps = supabase.table("employees").select("id, employee_code, full_name, designation").eq("role", "employee").eq("status", "APPROVED").execute().data or []
@@ -688,11 +784,11 @@ else:
                 records = [{"Emp Code": emp.get("employee_code", "N/A"), "Full Name": emp.get("full_name"), "Designation": emp.get("designation", "Worker"), "Present Days": 25, "Paid Holidays": 1, "OT Hours": 8.0, "Gross Pay (₹)": 18500.0, "Net Salary (₹)": 16562.0} for emp in emps]
                 st.dataframe(pd.DataFrame(records), use_container_width=True)
                 if st.button("Dual-Confirm & Lock Wage Sheet", type="primary"):
-                    st.success("Wage sheet locked and invoice generated!")
+                    st.success("Wage sheet locked and tax invoice generated!")
             else:
                 st.info("No approved employees available.")
 
-        # 11. ADVANCE / LOAN DESK
+        # 11. Advance / Loan Desk
         elif selected_panel == "Advance / Loan Desk":
             st.subheader("Salary Advance Requests")
             adv_reqs = supabase.table("advance_salaries").select("*").execute().data or []
@@ -701,7 +797,9 @@ else:
             else:
                 st.info("No salary advance requests logged yet.")
 
-    # SUPERVISOR
+    # -------------------------------------------------------------------------
+    # 4.2 SUPERVISOR PORTAL
+    # -------------------------------------------------------------------------
     elif active_role == "supervisor":
         st.sidebar.title("Supervisor Desk")
         st.sidebar.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
@@ -723,7 +821,9 @@ else:
         else:
             st.info("No candidates pending supervisor verification.")
 
-    # CLIENT
+    # -------------------------------------------------------------------------
+    # 4.3 CLIENT PORTAL
+    # -------------------------------------------------------------------------
     elif active_role == "client":
         st.sidebar.title("Client Portal")
         if st.sidebar.button("Logout"):
@@ -735,7 +835,9 @@ else:
         col_c2.metric("Present Today", "0")
         col_c3.metric("Absent Today", "0")
 
-    # EMPLOYEE
+    # -------------------------------------------------------------------------
+    # 4.4 EMPLOYEE PORTAL (ESS - 15m Geofenced Punch, Documents & Advance)
+    # -------------------------------------------------------------------------
     elif active_role == "employee":
         emp = st.session_state.user
         st.sidebar.markdown(f"### {emp.get('full_name')}")
@@ -750,7 +852,7 @@ else:
 
         if st.button("👍 Thumb Punch In / Out", type="primary"):
             if calculate_geofence(emp_lat, emp_lon, 18.651200, 73.805500):
-                st.success("✅ Geofence Validated! Attendance punched.")
+                st.success("✅ Geofence Validated! Attendance punched successfully.")
             else:
                 st.error("❌ Invalid Location! Outside 15-meter plant perimeter.")
 
@@ -775,85 +877,3 @@ else:
                 st.text_area("Reason")
                 if st.form_submit_button("Submit Advance Request"):
                     st.success("Advance Request submitted!")
-                    import os
-from reportlab.platypus import Image as RLImage
-
-def get_entity_logo(entity_name):
-    """एंटिटीच्या नावावरून आपोआप लोगो फाईल शोधणे"""
-    if not entity_name:
-        return None
-    ent_clean = entity_name.upper()
-    for file in os.listdir("."):
-        if file.startswith("logo_") and file.endswith((".png", ".jpg", ".jpeg")):
-            # फाईल नावावरून मॅच करणे (उदा. logo_SAGAR.png)
-            key = file.replace("logo_", "").split(".")[0].upper()
-            if key in ent_clean:
-                return file
-    return None
-
-def generate_official_offer_letter(emp_data, entity_name):
-    """डायनॅमिक लोगोसह ऑफर लेटर PDF तयार करणे"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=35, leftMargin=35, topMargin=30, bottomMargin=30)
-    styles = getSampleStyleSheet()
-    story = []
-
-    # १. एंटिटीचा लोगो वरती जोडणे
-    logo_file = get_entity_logo(entity_name)
-    if logo_file and os.path.exists(logo_file):
-        logo_img = RLImage(logo_file, width=130, height=50)
-        story.append(logo_img)
-        story.append(Spacer(1, 10))
-
-    # २. ऑफर लेटर हेडिंग व मजकूर
-    title_style = ParagraphStyle(name="OfferTitle", fontName="Helvetica-Bold", fontSize=16, alignment=1, textColor=colors.HexColor("#1E293B"))
-    story.append(Paragraph(f"OFFER LETTER - {entity_name.upper()}", title_style))
-    story.append(Spacer(1, 15))
-
-    body_text = f"""
-    Date: {date.today()}<br/><br/>
-    Dear <b>{emp_data.get('full_name')}</b>,<br/><br/>
-    We are pleased to offer you the position of <b>{emp_data.get('designation', 'Associate')}</b> at <b>{entity_name}</b>. 
-    Your employee identification code will be <b>{emp_data.get('employee_code', 'TBD')}</b>.<br/><br/>
-    Please review your employment details and statutory enrollments. This offer is subject to verification of your submitted credentials.
-    """
-    story.append(Paragraph(body_text, styles["Normal"]))
-    story.append(Spacer(1, 20))
-
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
-from datetime import datetime, time
-
-def calculate_shift_and_ot(punch_in_str, punch_out_str, shift_in_str="08:30", shift_out_str="17:00"):
-    fmt = "%H:%M"
-    p_in = datetime.strptime(punch_in_str, fmt)
-    p_out = datetime.strptime(punch_out_str, fmt)
-    s_in = datetime.strptime(shift_in_str, fmt)
-    s_out = datetime.strptime(shift_out_str, fmt)
-
-    # Shift chi nirdharit vel (e.g., 8.5 hours)
-    scheduled_shift_hours = (s_out - s_in).total_seconds() / 3600.0
-
-    # Pratyaksh kam kelele taas
-    actual_worked_hours = (p_out - p_in).total_seconds() / 3600.0
-
-    # Overtime calculation
-    ot_hours = max(0.0, round(actual_worked_hours - scheduled_shift_hours, 2))
-    
-    return round(actual_worked_hours, 2), ot_hours
-st.subheader("Shift Timing Configuration (In-Time & Out-Time)")
-
-with st.form("shift_config_form"):
-    c1, c2, c3 = st.columns(3)
-    shift_name = c1.text_input("Shift Name", value="General Shift")
-    shift_in = c2.time_input("Shift Start Time (In-Time)", value=time(8, 30))
-    shift_out = c3.time_input("Shift End Time (Out-Time)", value=time(17, 0))
-
-    # Total duration auto calculation (e.g. 8:30 AM to 5:00 PM)
-    duration = (datetime.combine(datetime.today(), shift_out) - datetime.combine(datetime.today(), shift_in)).total_seconds() / 3600.0
-    st.info(f"Nirdharit Shift Avadhi: **{duration:.1f} Hours** (Standard 8.5 Hours)")
-
-    if st.form_submit_button("Save Shift Timing", type="primary"):
-        # Supabase kinva database madhye shift timings update karne
-        st.success(f"{shift_name} ({shift_in.strftime('%I:%M %p')} - {shift_out.strftime('%I:%M %p')}) यशस्वीरित्या सेव्ह झाली!")
