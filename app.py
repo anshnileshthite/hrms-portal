@@ -532,20 +532,28 @@ else:
             loc1, loc2 = st.columns(2)
             with loc1:
                 st.subheader("1. Add Firm / Entity")
-                with st.form("add_entity_portal_form"):
-                    en_name = st.text_input("Firm / Entity Name (e.g. Sagar Enterprises)")
-                    en_addr = st.text_area("Registered Office Address")
-                    en_gst = st.text_input("GST Number")
-                    en_pref = st.text_input("Code Prefix (e.g. SE, GM, UE)")
-                    if st.form_submit_button("Save Entity"):
-                        if en_name and en_pref:
-                            supabase.table("entities").insert({
-                                "name": en_name, "address": en_addr, "gst_number": en_gst, "code_prefix": en_pref
-                            }).execute()
-                            st.cache_data.clear()
-                            st.success("Entity registered successfully!")
-                            st.rerun()
+                if st.form_submit_button("Save Client & Geofence Details"):
+                        if cl_name and cl_code:
+                            try:
+                                supabase.table("clients").insert({
+                                    "name": cl_name,
+                                    "client_code": cl_code,
+                                    "gst_number": cl_gst,
+                                    "plant_location": cl_full_addr,
+                                    "latitude": cl_lat,
+                                    "longitude": cl_lon,
+                                    "service_charge": cl_charge,
+                                    "contact_person_name": cl_contact_person,
+                                    "contact_person_email": cl_contact_email,
+                                    "entity_id": e_dict.get(assigned_ent)
+                                }).execute()
+                                st.cache_data.clear()
+                                st.success("Client registered successfully!")
+                                st.rerun()
+                            except Exception as db_err:
+                                st.error(f"Database error: {db_err}")
                         else:
+                            st.error("Client Name and Code are mandatory!")
                             st.error("Name and Code Prefix are required!")
 
             with loc2:
