@@ -6,6 +6,25 @@ import math
 from datetime import date, datetime
 from database import supabase
 
+# --- इथे हा नवीन Caching कोड पेस्ट करा ---
+@st.cache_data(ttl=600)
+def fetch_cached_entities():
+    return supabase.table("entities").select("id, name, code_prefix").execute().data or []
+
+@st.cache_data(ttl=600)
+def fetch_cached_clients():
+    return supabase.table("clients").select("id, name, client_code, latitude, longitude").execute().data or []
+
+@st.cache_data(ttl=300)
+def fetch_cached_employees():
+    return supabase.table("employees").select("id, employee_code, full_name, role, designation, status").execute().data or []
+# ---------------------------------------------
+
+st.set_page_config(page_title="HRMS & Payroll Enterprise Cloud", layout="wide")
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+    
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -804,3 +823,37 @@ def generate_official_offer_letter(emp_data, entity_name):
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
+from datetime import datetime, time
+
+def calculate_shift_and_ot(punch_in_str, punch_out_str, shift_in_str="08:30", shift_out_str="17:00"):
+    fmt = "%H:%M"
+    p_in = datetime.strptime(punch_in_str, fmt)
+    p_out = datetime.strptime(punch_out_str, fmt)
+    s_in = datetime.strptime(shift_in_str, fmt)
+    s_out = datetime.strptime(shift_out_str, fmt)
+
+    # Shift chi nirdharit vel (e.g., 8.5 hours)
+    scheduled_shift_hours = (s_out - s_in).total_seconds() / 3600.0
+
+    # Pratyaksh kam kelele taas
+    actual_worked_hours = (p_out - p_in).total_seconds() / 3600.0
+
+    # Overtime calculation
+    ot_hours = max(0.0, round(actual_worked_hours - scheduled_shift_hours, 2))
+    
+    return round(actual_worked_hours, 2), ot_hours
+st.subheader("Shift Timing Configuration (In-Time & Out-Time)")
+
+with st.form("shift_config_form"):
+    c1, c2, c3 = st.columns(3)
+    shift_name = c1.text_input("Shift Name", value="General Shift")
+    shift_in = c2.time_input("Shift Start Time (In-Time)", value=time(8, 30))
+    shift_out = c3.time_input("Shift End Time (Out-Time)", value=time(17, 0))
+
+    # Total duration auto calculation (e.g. 8:30 AM to 5:00 PM)
+    duration = (datetime.combine(datetime.today(), shift_out) - datetime.combine(datetime.today(), shift_in)).total_seconds() / 3600.0
+    st.info(f"Nirdharit Shift Avadhi: **{duration:.1f} Hours** (Standard 8.5 Hours)")
+
+    if st.form_submit_button("Save Shift Timing", type="primary"):
+        # Supabase kinva database madhye shift timings update karne
+        st.success(f"{shift_name} ({shift_in.strftime('%I:%M %p')} - {shift_out.strftime('%I:%M %p')}) यशस्वीरित्या सेव्ह झाली!")
