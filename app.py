@@ -305,7 +305,7 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     c_addr = client_obj.get("plant_location", "Plot No-D-1, MIDC Chakan, Industrial Area Phase-II, Village Bhamboli Tal-Khed, Dist: Pune - 410501") if client_obj else "Plot No-D-1, MIDC Chakan, Industrial Area Phase-II, Village Bhamboli Tal-Khed, Dist: Pune - 410501"
     c_gst = client_obj.get("gst_number", "27AACCD4599E1ZH") if client_obj else "27AACCD4599E1ZH"
 
-    # Consignee Details[cite: 14]
+    # Consignee Details
     cons_name = inv_data.get("consignee_name") or c_name
     cons_addr = inv_data.get("consignee_address") or c_addr
     cons_gst = inv_data.get("consignee_gstin") or c_gst
@@ -421,7 +421,7 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     decl = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the services described and that all particulars are true and correct."
     bank_d = f"<b>Company Bank Account Details:</b><br/>BANK: {b_name}<br/>A/C NO: {b_acc}<br/>IFSC: {b_ifsc}"
     
-    # Stamp & Signature auto attachment[cite: 14]
+    # Stamp & Signature auto attachment
     stamp_f, sig_f = get_entity_assets(code_pref)
     sign_elements = [Paragraph(f"<b>for {e_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
     
@@ -540,6 +540,7 @@ if not st.session_state.user:
                         "bank_account_no": c_acc, 
                         "ifsc_code": c_ifsc, 
                         "pan_number": c_pan,
+                        "aadhar_number": c_aadhar,
                         "role": "employee", 
                         "status": "PENDING_SUPERVISOR"
                     }
@@ -634,9 +635,11 @@ else:
                     me_marital = m2.selectbox("Marital Status", ["Single", "Married"])
                     me_desig = m3.text_input("Designation")
                     
-                    me_shift_timing = m1.selectbox("Assigned Shift Schedule *", STANDARD_SHIFTS)
-                    me_wo_day = m2.selectbox("Weekly Off (WO) Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0)
-                    me_pwd = m3.text_input("Portal Password", type="password")
+                    me_cat = m1.selectbox("Category", ["Skilled", "Semi-Skilled", "Unskilled"], index=1)
+                    me_shift_timing = m2.selectbox("Assigned Shift Schedule *", STANDARD_SHIFTS)
+                    me_wo_day = m3.selectbox("Weekly Off (WO) Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0)
+                    me_pwd = m1.text_input("Portal Password", type="password")
+                    me_aadhar = m2.text_input("Aadhaar Number *")
 
                     st.write("##### 2. Organization Assignment & Statutory Numbers")
                     m4, m5 = st.columns(2)
@@ -664,9 +667,9 @@ else:
                                     "employee_code": me_code, "user_id": me_code, "password": me_pwd if me_pwd else "emp1234",
                                     "full_name": me_name, "father_name": me_father, "gender": me_gender, "dob": str(me_dob),
                                     "phone_number": me_phone, "emergency_contact": me_emg, "marital_status": me_marital, 
-                                    "designation": me_desig, "shift_hours": 8.5, "weekly_off_day": me_wo_day, 
+                                    "designation": me_desig, "category": me_cat, "shift_hours": 8.5, "weekly_off_day": me_wo_day, 
                                     "entity_id": e_map.get(sel_ent), "client_id": c_map.get(sel_cli),
-                                    "uan_number": me_uan, "esic_number": me_esic, "pan_number": me_pan,
+                                    "uan_number": me_uan, "esic_number": me_esic, "pan_number": me_pan, "aadhar_number": me_aadhar,
                                     "bank_name": me_bank, "bank_branch": me_branch, "bank_account_no": me_acc,
                                     "ifsc_code": me_ifsc, "role": "employee", "status": "APPROVED",
                                     "joining_date": str(date.today())
@@ -677,31 +680,67 @@ else:
                             except Exception as e:
                                 st.error(f"Error saving employee: {e}")
 
+            # -------------------------------------------------------------
+            # EDIT / DELETE EMPLOYEE (FULL CRUD WITH ALL FIELDS)
+            # -------------------------------------------------------------
             with tab_edit_emp:
                 all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if all_emps:
-                    emp_opt_map = {f"[{e.get('employee_code')}] {e.get('full_name')}": e for e in all_emps}
+                    emp_opt_map = {f"[{e.get('employee_code', 'N/A')}] {e.get('full_name')}": e for e in all_emps}
                     sel_emp_to_edit = st.selectbox("Select Employee to Update / Delete", list(emp_opt_map.keys()))
                     curr_selected = emp_opt_map[sel_emp_to_edit]
 
                     with st.form("edit_emp_crud_form"):
+                        st.write("##### 1. Login Credentials & System Identifiers")
+                        c_u1, c_u2, c_u3 = st.columns(3)
+                        up_code = c_u1.text_input("Employee Code", value=curr_selected.get("employee_code", ""))
+                        up_uid = c_u2.text_input("User ID (Login)", value=curr_selected.get("user_id", ""))
+                        up_pwd = c_u3.text_input("Portal Password", value=curr_selected.get("password", ""))
+
+                        st.write("##### 2. Personal Information")
                         ed1, ed2, ed3 = st.columns(3)
-                        up_name = ed1.text_input("Full Name", value=curr_selected.get("full_name", ""))
-                        up_phone = ed2.text_input("Mobile", value=curr_selected.get("phone_number", ""))
-                        up_desig = ed3.text_input("Designation", value=curr_selected.get("designation", ""))
-                        up_pwd = ed1.text_input("Reset Password", value=curr_selected.get("password", ""))
-                        up_bank = ed2.text_input("Bank Name", value=curr_selected.get("bank_name", ""))
-                        up_acc = ed3.text_input("Account Number", value=curr_selected.get("bank_account_no", ""))
-                        up_ifsc = ed1.text_input("IFSC", value=curr_selected.get("ifsc_code", ""))
-                        up_shift = ed2.selectbox("Shift Schedule", STANDARD_SHIFTS)
-                        up_wo = ed3.selectbox("Weekly Off Day", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0)
-                        
+                        up_name = ed1.text_input("Full Name *", value=curr_selected.get("full_name", ""))
+                        up_father = ed2.text_input("Father's Name", value=curr_selected.get("father_name", ""))
+                        up_gender = ed3.selectbox("Gender", ["Male", "Female", "Other"], index=["Male", "Female", "Other"].index(curr_selected.get("gender", "Male")) if curr_selected.get("gender") in ["Male", "Female", "Other"] else 0)
+
+                        ed4, ed5, ed6 = st.columns(3)
+                        raw_dob = curr_selected.get("dob")
+                        default_dob = datetime.strptime(str(raw_dob).split("T")[0], "%Y-%m-%d").date() if raw_dob else date(1995, 1, 1)
+                        up_dob = ed4.date_input("Date of Birth (DOB)", value=default_dob)
+                        up_phone = ed5.text_input("Mobile Number *", value=curr_selected.get("phone_number", ""))
+                        up_emg = ed6.text_input("Emergency Contact", value=curr_selected.get("emergency_contact", ""))
+
+                        st.write("##### 3. Employment & Organization Assignment")
+                        ed7, ed8, ed9 = st.columns(3)
+                        up_desig = ed7.text_input("Designation", value=curr_selected.get("designation", ""))
+                        up_cat = ed8.selectbox("Category", ["Skilled", "Semi-Skilled", "Unskilled"], index=["Skilled", "Semi-Skilled", "Unskilled"].index(curr_selected.get("category", "Semi-Skilled")) if curr_selected.get("category") in ["Skilled", "Semi-Skilled", "Unskilled"] else 1)
+                        up_wo = ed9.selectbox("Weekly Off Day", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].index(curr_selected.get("weekly_off_day", "Sunday")) if curr_selected.get("weekly_off_day") in ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] else 0)
+
+                        st.write("##### 4. Statutory & Identity Numbers")
+                        st1, st2, st3, st4 = st.columns(4)
+                        up_uan = st1.text_input("UAN Number", value=curr_selected.get("uan_number", ""))
+                        up_esic = st2.text_input("ESIC Number", value=curr_selected.get("esic_number", ""))
+                        up_pan = st3.text_input("PAN Number", value=curr_selected.get("pan_number", ""))
+                        up_aadhar = st4.text_input("Aadhaar Number", value=str(curr_selected.get("aadhar_number") or ""))
+
+                        st.write("##### 5. Bank Account Details")
+                        bk1, bk2, bk3, bk4 = st.columns(4)
+                        up_bank = bk1.text_input("Bank Name", value=curr_selected.get("bank_name", ""))
+                        up_branch = bk2.text_input("Branch Name", value=curr_selected.get("bank_branch", ""))
+                        up_acc = bk3.text_input("Account Number", value=curr_selected.get("bank_account_no", ""))
+                        up_ifsc = bk4.text_input("IFSC Code", value=curr_selected.get("ifsc_code", ""))
+
+                        st.write("---")
                         c_btn1, c_btn2 = st.columns(2)
                         if c_btn1.form_submit_button("Update Employee Data", type="primary"):
                             supabase.table("employees").update({
-                                "full_name": up_name, "phone_number": up_phone, "designation": up_desig,
-                                "password": up_pwd, "bank_name": up_bank, "bank_account_no": up_acc, 
-                                "ifsc_code": up_ifsc, "weekly_off_day": up_wo
+                                "employee_code": up_code, "user_id": up_uid, "password": up_pwd,
+                                "full_name": up_name, "father_name": up_father, "gender": up_gender,
+                                "dob": str(up_dob), "phone_number": up_phone, "emergency_contact": up_emg,
+                                "designation": up_desig, "category": up_cat, "weekly_off_day": up_wo,
+                                "uan_number": up_uan, "esic_number": up_esic, "pan_number": up_pan,
+                                "aadhar_number": up_aadhar, "bank_name": up_bank, "bank_branch": up_branch,
+                                "bank_account_no": up_acc, "ifsc_code": up_ifsc
                             }).eq("id", curr_selected["id"]).execute()
                             st.cache_data.clear()
                             st.success("✅ Data Updated Successfully: Employee record refreshed!")
@@ -712,6 +751,8 @@ else:
                             st.cache_data.clear()
                             st.warning("🗑️ Data Deleted Successfully: Employee record removed!")
                             st.rerun()
+                else:
+                    st.info("No employee records found.")
 
             with tab_vault:
                 emp_records = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
@@ -725,9 +766,22 @@ else:
 
                     matched_rule = None
                     try:
-                        s_rules = supabase.table("salary_structures").select("*").eq("entity_id", curr_emp.get("entity_id")).execute().data or []
-                        if s_rules: matched_rule = s_rules[0]
-                    except Exception: pass
+                        sr_query = supabase.table("salary_structures").select("*").eq("entity_id", curr_emp.get("entity_id"))
+                        if curr_emp.get("client_id"):
+                            sr_query = sr_query.eq("client_id", curr_emp.get("client_id"))
+                        if curr_emp.get("designation"):
+                            sr_query = sr_query.ilike("designation", curr_emp.get("designation").strip())
+                        if curr_emp.get("category"):
+                            sr_query = sr_query.eq("category", curr_emp.get("category").strip())
+                        s_matched = sr_query.execute().data
+                        if s_matched:
+                            matched_rule = s_matched[0]
+                        else:
+                            fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", curr_emp.get("entity_id")).execute().data
+                            if fallback_res:
+                                matched_rule = fallback_res[0]
+                    except Exception:
+                        pass
 
                     v_c1, v_c2 = st.columns(2)
                     with v_c1:
@@ -1191,9 +1245,22 @@ else:
                 for emp_item in emp_records:
                     sal_struct = None
                     try:
-                        s_res = supabase.table("salary_structures").select("*").eq("entity_id", emp_item.get("entity_id")).execute().data
-                        if s_res: sal_struct = s_res[0]
-                    except Exception: pass
+                        sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp_item.get("entity_id"))
+                        if emp_item.get("client_id"):
+                            sr_query = sr_query.eq("client_id", emp_item.get("client_id"))
+                        if emp_item.get("designation"):
+                            sr_query = sr_query.ilike("designation", emp_item.get("designation").strip())
+                        if emp_item.get("category"):
+                            sr_query = sr_query.eq("category", emp_item.get("category").strip())
+                        s_matched = sr_query.execute().data
+                        if s_matched:
+                            sal_struct = s_matched[0]
+                        else:
+                            fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", emp_item.get("entity_id")).execute().data
+                            if fallback_res:
+                                sal_struct = fallback_res[0]
+                    except Exception:
+                        pass
 
                     b_pay = float(sal_struct.get("basic", 14010.0)) if sal_struct else 14010.0
                     d_pay = float(sal_struct.get("da", 2511.0)) if sal_struct else 2511.0
@@ -1268,7 +1335,7 @@ else:
                         "UAN Number": emp_item.get("uan_number", "N/A"),
                         "ESIC Number": emp_item.get("esic_number", "N/A"),
                         "PAN Number": emp_item.get("pan_number", "N/A"),
-                        "Aadhaar Number": "[Aadhaar Redacted]",
+                        "Aadhaar Number": str(emp_item.get("aadhar_number") or ""),
                         "Gender": emp_item.get("gender", "Male"),
                         "Date of Joining": emp_item.get("joining_date", str(date.today())),
                         "Date of Birth": emp_item.get("dob", "N/A"),
@@ -1429,8 +1496,8 @@ else:
                             c_name = cli_map.get(req_emp.get("client_id"), "N/A")
 
                             st.markdown(f"""
-                            <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 5px solid #F59E0B; border-radius: 6px; padding: 14px; margin-bottom: 10px;">
-                                <b>Employee:</b> {req_emp.get('full_name', 'N/A')} (<b>ID:</b> {req_emp.get('employee_code', 'N/A')}) | <b>Designation:</b> {req_emp.get('designation', 'Staff')}<br/>
+                            <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 5px solid #F59E0B; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
+                                <b>Employee:</b> {req_emp.get('full_name', 'N/A')} (<b>Code:</b> {req_emp.get('employee_code', 'N/A')}) | <b>Designation:</b> {req_emp.get('designation', 'Staff')}<br/>
                                 <b>Entity:</b> {e_name} | <b>Client Work Site:</b> {c_name}<br/>
                                 <b>Requested Amount:</b> <span style="font-size: 16px; font-weight: bold; color: #0F172A;">₹{float(req.get('amount', 0)):,.2f}</span> | <b>Date:</b> {req.get('requested_date') or str(req.get('created_at'))[:10]}<br/>
                                 <b>Reason:</b> {req.get('reason', 'None')}
@@ -1519,6 +1586,11 @@ else:
                         generated_code = f"{prefix}{str(cand.get('id', '001'))[:4].upper()}"
                         set_user_id = app1.text_input("User ID (Default Employee Code)", value=generated_code, key=f"uid_{cand['id']}")
                         set_pwd = app2.text_input("Set Initial Password", value="emp" + cand['phone_number'][-4:], key=f"pwd_{cand['id']}")
+                        
+                        app_c1, app_c2 = st.columns(2)
+                        conf_desig = app_c1.text_input("Confirm Designation *", value=cand.get("designation") or "Associate", key=f"c_desig_{cand['id']}")
+                        conf_cat = app_c2.selectbox("Confirm Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key=f"c_cat_{cand['id']}")
+                        
                         sel_shift = app2.selectbox("Confirm Shift Timing *", STANDARD_SHIFTS, key=f"shift_{cand['id']}")
                         sel_wo = app1.selectbox("Confirm Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key=f"wo_{cand['id']}")
 
@@ -1528,6 +1600,8 @@ else:
                                 "employee_code": set_user_id, 
                                 "user_id": set_user_id, 
                                 "password": set_pwd,
+                                "designation": conf_desig,
+                                "category": conf_cat,
                                 "status": "APPROVED",
                                 "weekly_off_day": sel_wo,
                                 "shift_hours": 8.5,
@@ -2013,7 +2087,7 @@ else:
                     if cl_info: cl_name = cl_info[0].get("name")
                 except Exception: pass
 
-            aadhar_val = str(emp.get("aadhar_number") or emp.get("pan_number") or "[Aadhaar on Record]")
+            aadhar_val = str(emp.get("aadhar_number") or "")
 
             p_col1, p_col2 = st.columns(2)
             with p_col1:
@@ -2347,9 +2421,22 @@ else:
 
             sal_rule = None
             try:
-                sr_res = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
-                if sr_res: sal_rule = sr_res[0]
-            except Exception: pass
+                sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id"))
+                if emp.get("client_id"):
+                    sr_query = sr_query.eq("client_id", emp.get("client_id"))
+                if emp.get("designation"):
+                    sr_query = sr_query.ilike("designation", emp.get("designation").strip())
+                if emp.get("category"):
+                    sr_query = sr_query.eq("category", emp.get("category").strip())
+                s_matched = sr_query.execute().data
+                if s_matched:
+                    sal_rule = s_matched[0]
+                else:
+                    fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
+                    if fallback_res:
+                        sal_rule = fallback_res[0]
+            except Exception:
+                pass
 
             d1, d2 = st.columns(2)
             with d1:
