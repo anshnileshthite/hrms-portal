@@ -452,6 +452,131 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     buffer.seek(0)
     return buffer.getvalue()
 
+# -------------------------------------------------------------
+# EXACT REPLICA: SALARY PAYSLIP PDF GENERATION (CUSTOM TEMPLATE)
+# -------------------------------------------------------------
+def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
+    styles = getSampleStyleSheet()
+    story = []
+
+    entity_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
+    ent_addr = entity_obj.get("address", "A/p: Nimgaon tal-khed, Dist-pune") if entity_obj else "A/p: Nimgaon tal-khed, Dist-pune"
+
+    # Header: Left Month Title | Right Entity Info
+    p_month = Paragraph(f"<font size=11><b>Salary Slip for {month_str}</b></font>", styles["Normal"])
+    p_company = Paragraph(f"<font size=10><b>{entity_name}</b></font><br/><font size=7.5>{ent_addr}</font>", ParagraphStyle(name="RightHead", alignment=2))
+    
+    t_head = Table([[p_month, p_company]], colWidths=[280, 282])
+    t_head.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+    ]))
+    story.append(t_head)
+    story.append(Spacer(1, 4))
+
+    # Employee Master Information
+    doj_val = str(emp_data.get("joining_date") or "")
+    if "T" in doj_val:
+        doj_val = doj_val.split("T")[0]
+
+    emp_info_data = [
+        ["Emp. Code:", str(emp_data.get("employee_code", "N/A")), "Paid Days:", str(att_summary.get("paid_days", 26))],
+        ["Name:", str(emp_data.get("full_name", "N/A")), "Total Days:", str(att_summary.get("total_days", 26))],
+        ["Designation:", str(emp_data.get("designation", "Staff")), "Bank Name:", str(emp_data.get("bank_name", "N/A"))],
+        ["Client Site:", str(client_name), "Bank A/c No.:", str(emp_data.get("bank_account_no", "N/A"))],
+        ["DOJ:", doj_val, "PAN No.:", str(emp_data.get("pan_number", "N/A"))],
+        ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", str(emp_data.get("aadhar_number") or "[Aadhaar Redacted]")]
+    ]
+    t_emp = Table(emp_info_data, colWidths=[90, 190, 100, 182])
+    t_emp.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+    ]))
+    story.append(t_emp)
+
+    # Earnings & Deductions Data
+    rate_basic = float(sal_rule.get("basic", 0.0)) if sal_rule else 0.0
+    rate_da = float(sal_rule.get("da", 0.0)) if sal_rule else 0.0
+    rate_hra = float(sal_rule.get("hra", 0.0)) if sal_rule else 0.0
+
+    earned_basic = deductions_data.get('earned_basic', 0.0)
+    earned_da = deductions_data.get('earned_da', 0.0)
+    earned_hra = deductions_data.get('earned_hra', 0.0)
+    ot_amt = deductions_data.get('ot_amount', 0.0)
+    total_gross = earned_basic + earned_da + earned_hra + ot_amt
+
+    pf_ded = deductions_data.get('pf_ded', 0.0)
+    esic_ded = deductions_data.get('esic_ded', 0.0)
+    pt_ded = deductions_data.get('pt_ded', 0.0)
+    adv_ded = deductions_data.get('adv_val', 0.0)
+    ppe_ded = deductions_data.get('ppe_ded', 0.0)
+    total_ded = pf_ded + esic_ded + pt_ded + adv_ded + ppe_ded
+
+    net_salary = total_gross - total_ded
+
+    calc_table_data = [
+        ["Earnings in Rs.", "Monthly Rate", "Earned (Rs.)", "Deductions", "Amount Rs."],
+        ["Basic", f"{rate_basic:,.2f}", f"{earned_basic:,.2f}", "Provident Fund (PF)", f"{pf_ded:,.2f}"],
+        ["D.A.", f"{rate_da:,.2f}", f"{earned_da:,.2f}", "ESIC", f"{esic_ded:,.2f}"],
+        ["H.R.A.", f"{rate_hra:,.2f}", f"{earned_hra:,.2f}", "Prof. Tax (PT)", f"{pt_ded:,.2f}"],
+        ["Overtime (OT)", "-", f"{ot_amt:,.2f}", "Salary Advance", f"{adv_ded:,.2f}"],
+        ["", "", "", "Uniform / PPE", f"{ppe_ded:,.2f}"],
+        ["Gross Earning", "", f"{total_gross:,.2f}", "Total Deductions", f"{total_ded:,.2f}"]
+    ]
+
+    t_calc = Table(calc_table_data, colWidths=[120, 80, 80, 202, 80])
+    t_calc.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F8FAFC")),
+        ('ALIGN', (1,1), (2,-1), 'RIGHT'),
+        ('ALIGN', (4,1), (4,-1), 'RIGHT'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+    ]))
+    story.append(t_calc)
+
+    # Net Salary Row
+    t_net = Table([["Net Salary", f"Rs. {net_salary:,.2f}"]], colWidths=[280, 282])
+    t_net.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 8.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+    ]))
+    story.append(t_net)
+
+    # Amount in Words & Remarks
+    t_words = Table([
+        [Paragraph(f"<b>Amount in Words:</b> {num_to_words(net_salary)}", styles["Normal"])],
+        [Paragraph("<b>Remarks:</b> -", styles["Normal"])],
+        [Paragraph("<font size=7.5>This is computer generated payslip and does not require any signature.</font>", ParagraphStyle(name="CenterNote", alignment=1))]
+    ], colWidths=[562])
+    t_words.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+    ]))
+    story.append(t_words)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # =============================================================================
 # 3. PUBLIC INTERFACE
 # =============================================================================
@@ -1098,6 +1223,19 @@ else:
                 "📋 Pending Requests",
                 "🏷️ PPE Price Catalog"
             ])
+            
+            ent_list = fetch_cached_entities()
+            cli_list = fetch_cached_clients()
+            emp_list = fetch_cached_employees()
+
+            p_e_map = {e["name"]: e["id"] for e in ent_list}
+            p_c_map = {c["name"]: c["id"] for c in cli_list}
+            p_emp_map = {f"[{e.get('employee_code', 'N/A')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
+
+            emp_obj_lookup = {e["id"]: e for e in emp_list}
+            ent_name_lookup = {e["id"]: e["name"] for e in ent_list}
+            cli_name_lookup = {c["id"]: c["name"] for c in cli_list}
+
             with tab_ppe_cat:
                 st.write("##### 🏷️ Entity & Client Wise PPE Pricing Master")
                 with st.form("add_ppe_catalog_form"):
@@ -1138,17 +1276,6 @@ else:
                     st.dataframe(pd.DataFrame(cat_rows), use_container_width=True)
                 else:
                     st.info("अद्याप कोणत्याही PPE वस्तूंचे दर सेट केलेले नाहीत.")
-            ent_list = fetch_cached_entities()
-            cli_list = fetch_cached_clients()
-            emp_list = fetch_cached_employees()
-
-            p_e_map = {e["name"]: e["id"] for e in ent_list}
-            p_c_map = {c["name"]: c["id"] for c in cli_list}
-            p_emp_map = {f"[{e.get('employee_code', 'N/A')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
-
-            emp_obj_lookup = {e["id"]: e for e in emp_list}
-            ent_name_lookup = {e["id"]: e["name"] for e in ent_list}
-            cli_name_lookup = {c["id"]: c["name"] for c in cli_list}
 
             with tab_ppe_issue:
                 with st.form("manual_ppe_form"):
@@ -1353,7 +1480,7 @@ else:
                     except Exception: 
                         pass
 
-                    # --- नवीन: PPE / Uniform Deduction फेच करणे ---
+                    # PPE / Uniform Deduction Fetch
                     ppe_ded = 0.0
                     try:
                         ppe_recs = supabase.table("ppe_records").select("cost").eq("employee_id", emp_item["id"]).eq("deduction_month", sel_month).eq("status", "APPROVED").execute().data or []
@@ -1361,7 +1488,7 @@ else:
                     except Exception:
                         pass
 
-                    # Total Deductions सूत्र अपडेट (Advance + PPE समावेश)
+                    # Total Deductions (Advance + PPE)
                     total_deductions = pf_ded + esic_ded + pt_ded + adv_val + ppe_ded
                     net_take_home = round(total_gross - total_deductions, 2)
 
@@ -1419,7 +1546,7 @@ else:
                         "ESIC 0.75%": esic_ded,
                         "Professional Tax": pt_ded,
                         "Advance": adv_val,
-                        "PPE / Uniform Deduction": ppe_ded,  # <--- नवीन कॉलम
+                        "PPE / Uniform Deduction": ppe_ded,
                         "Total Deductions": total_deductions,
                         "Net Wages": net_take_home,
                         "Employer PF 13%": pf_er,
@@ -2078,7 +2205,7 @@ else:
                     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
                     dist = R * c
 
-                    is_valid_location = dist <= 50.0  # 50 meter buffer for mobile gps
+                    is_valid_location = dist <= 50.0
 
                     if is_valid_location:
                         now_time = datetime.now()
@@ -2487,7 +2614,7 @@ else:
             e_ot = round(ot_hrs * ot_rate, 2)
             t_gross = e_basic + e_da + e_hra + e_other + e_ot
 
-            # पीएफ सीलिंग
+            # पीएफ सीलिंग (₹15,000 वयर आसल्यार कमाल ₹1,800)
             pf_d = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
             esic_d = round(t_gross * 0.0075, 2)
             pt_d = 200.0 if t_gross > 10000 else 0.0
@@ -2510,7 +2637,7 @@ else:
                 'ot_amount': e_ot, 'pf_ded': pf_d, 'esic_ded': esic_d, 'pt_ded': pt_d,
                 'adv_val': adv_d, 'ppe_ded': ppe_d
             }
-            att_summary_payload = {'paid_days': p_days, 'ot_hours': ot_hrs}
+            att_summary_payload = {'paid_days': p_days, 'total_days': 26, 'ot_hours': ot_hrs}
 
             # खरी सॅलरी स्लिप तयार करणे
             payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
@@ -2560,92 +2687,6 @@ else:
             with d1:
                 st.markdown("##### 📑 Official Offer Letter / अधिकृत ऑफर लेटर")
                 off_data = generate_official_offer_letter(emp, ent_val, assigned_client_name, sal_rule)
-                def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
-    styles = getSampleStyleSheet()
-    story = []
-
-    entity_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
-    ent_addr = entity_obj.get("address", "") if entity_obj else ""
-
-    # Header
-    title_p = Paragraph(f"<font size=13><b>{entity_name}</b></font><br/><font size=8>{ent_addr}</font><br/><font size=10><b>PAYSLIP FOR THE MONTH OF {month_str.upper()}</b></font>", ParagraphStyle(name="CenterPayslipTitle", alignment=1))
-    story.append(title_p)
-    story.append(Spacer(1, 10))
-
-    # Employee Info Table
-    emp_table_data = [
-        [f"Employee ID: {emp_data.get('employee_code', 'N/A')}", f"Name: {emp_data.get('full_name')}"],
-        [f"Designation: {emp_data.get('designation', 'Staff')}", f"Client Site: {client_name}"],
-        [f"UAN: {emp_data.get('uan_number', 'N/A')}", f"ESIC: {emp_data.get('esic_number', 'N/A')}"],
-        [f"Bank A/C: {emp_data.get('bank_account_no', 'N/A')}", f"IFSC: {emp_data.get('ifsc_code', 'N/A')}"],
-        [f"Present Days: {att_summary.get('paid_days', 26)}", f"OT Hours: {att_summary.get('ot_hours', 0.0)}"]
-    ]
-    t_info = Table(emp_table_data, colWidths=[270, 270])
-    t_info.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('PADDING', (0,0), (-1,-1), 3),
-    ]))
-    story.append(t_info)
-    story.append(Spacer(1, 10))
-
-    # Earnings & Deductions Calculations
-    earned_basic = deductions_data.get('earned_basic', 0.0)
-    earned_da = deductions_data.get('earned_da', 0.0)
-    earned_hra = deductions_data.get('earned_hra', 0.0)
-    earned_other = deductions_data.get('earned_other', 0.0)
-    ot_amt = deductions_data.get('ot_amount', 0.0)
-    gross_pay = earned_basic + earned_da + earned_hra + earned_other + ot_amt
-
-    pf_val = deductions_data.get('pf_ded', 0.0)
-    esic_val = deductions_data.get('esic_ded', 0.0)
-    pt_val = deductions_data.get('pt_ded', 0.0)
-    adv_val = deductions_data.get('adv_val', 0.0)
-    ppe_val = deductions_data.get('ppe_ded', 0.0)  # <--- PPE कपात
-    total_ded = pf_val + esic_val + pt_val + adv_val + ppe_val
-    net_pay = gross_pay - total_ded
-
-    # Breakdown Table
-    breakdown_data = [
-        ["EARNINGS", "AMOUNT (₹)", "DEDUCTIONS", "AMOUNT (₹)"],
-        ["Basic Pay", f"{earned_basic:,.2f}", "Provident Fund (PF)", f"{pf_val:,.2f}"],
-        ["Dearness Allowance (DA)", f"{earned_da:,.2f}", "ESIC", f"{esic_val:,.2f}"],
-        ["House Rent Allowance (HRA)", f"{earned_hra:,.2f}", "Professional Tax (PT)", f"{pt_val:,.2f}"],
-        ["Other Allowances", f"{earned_other:,.2f}", "Salary Advance", f"{adv_val:,.2f}"],
-        ["Overtime Pay (OT)", f"{ot_amt:,.2f}", "PPE / Uniform Deduction", f"{ppe_val:,.2f}"],
-        ["Total Gross Earnings", f"₹ {gross_pay:,.2f}", "Total Deductions", f"₹ {total_ded:,.2f}"],
-        ["", "", "NET TAKE HOME PAY", f"₹ {net_pay:,.2f}"]
-    ]
-    t_breakdown = Table(breakdown_data, colWidths=[160, 110, 160, 110])
-    t_breakdown.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F1F5F9")),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTNAME', (0,-2), (-1,-1), 'Helvetica-Bold'),
-        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-        ('ALIGN', (3,0), (3,-1), 'RIGHT'),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('PADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(t_breakdown)
-    story.append(Spacer(1, 10))
-
-    words_p = Paragraph(f"<b>Amount in words:</b> {num_to_words(net_pay)}", styles["Normal"])
-    story.append(words_p)
-    story.append(Spacer(1, 25))
-
-    # Sign-off
-    sign_table = Table([["Employee Signature", "Authorized Signatory"]], colWidths=[270, 270])
-    sign_table.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT'), ('FONTSIZE', (0,0), (-1,-1), 8)]))
-    story.append(sign_table)
-
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
                 st.download_button("📥 Download Offer Letter (PDF)", data=off_data, file_name=f"Offer_{emp.get('employee_code')}.pdf", mime="application/pdf")
             with d2:
                 st.markdown("##### 🪪 Statutory ESIC Card / ईएसआयसी कार्ड")
@@ -2655,7 +2696,6 @@ else:
         elif selected_emp_panel == "Request PPE Equipment":
             st.subheader("Request Safety Equipment / PPE / सुरक्षा साधनांची मागणी")
             
-            # कर्मचाऱ्याच्या Entity व Client नुसार लाइव्ह कॅटलॉग लोड करणे
             emp_catalog = []
             try:
                 emp_catalog = supabase.table("ppe_catalog").select("item_name, price").eq("entity_id", emp.get("entity_id")).eq("client_id", emp.get("client_id")).execute().data or []
