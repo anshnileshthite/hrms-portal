@@ -453,7 +453,7 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     return buffer.getvalue()
 
 # -------------------------------------------------------------
-# EXACT REPLICA: SALARY PAYSLIP PDF GENERATION (CUSTOM TEMPLATE)
+# EXACT REPLICA: SALARY PAYSLIP PDF GENERATION (PROFESSIONAL CENTERED)
 # -------------------------------------------------------------
 def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
     buffer = io.BytesIO()
@@ -464,20 +464,16 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     entity_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
     ent_addr = entity_obj.get("address", "A/p: Nimgaon tal-khed, Dist-pune") if entity_obj else "A/p: Nimgaon tal-khed, Dist-pune"
 
-    # Header: Left Month Title | Right Entity Info
-    p_month = Paragraph(f"<font size=11><b>Salary Slip for {month_str}</b></font>", styles["Normal"])
-    p_company = Paragraph(f"<font size=10><b>{entity_name}</b></font><br/><font size=7.5>{ent_addr}</font>", ParagraphStyle(name="RightHead", alignment=2))
+    # Centered Header: Title -> Entity Name -> Address
+    header_html = f"""<font size=13><b>SALARY SLIP FOR THE MONTH OF {month_str.upper()}</b></font><br/>
+    <font size=11><b>{entity_name}</b></font><br/>
+    <font size=8 color='#475569'>{ent_addr}</font>"""
     
-    t_head = Table([[p_month, p_company]], colWidths=[280, 282])
-    t_head.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-    ]))
-    story.append(t_head)
-    story.append(Spacer(1, 4))
+    p_center_head = Paragraph(header_html, ParagraphStyle(name="CenterHeadPayslip", alignment=1, leading=16))
+    story.append(p_center_head)
+    story.append(Spacer(1, 10))
 
-    # Employee Master Information
+    # Employee Information
     doj_val = str(emp_data.get("joining_date") or "")
     if "T" in doj_val:
         doj_val = doj_val.split("T")[0]
@@ -490,19 +486,20 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
         ["DOJ:", doj_val, "PAN No.:", str(emp_data.get("pan_number", "N/A"))],
         ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", str(emp_data.get("aadhar_number") or "[Aadhaar Redacted]")]
     ]
-    t_emp = Table(emp_info_data, colWidths=[90, 190, 100, 182])
+    t_emp = Table(emp_info_data, colWidths=[95, 185, 95, 187])
     t_emp.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
         ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
         ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
         ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
-        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
     ]))
     story.append(t_emp)
+    story.append(Spacer(1, 8))
 
-    # Earnings & Deductions Data
+    # Earnings & Deductions
     rate_basic = float(sal_rule.get("basic", 0.0)) if sal_rule else 0.0
     rate_da = float(sal_rule.get("da", 0.0)) if sal_rule else 0.0
     rate_hra = float(sal_rule.get("hra", 0.0)) if sal_rule else 0.0
@@ -519,7 +516,6 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     adv_ded = deductions_data.get('adv_val', 0.0)
     ppe_ded = deductions_data.get('ppe_ded', 0.0)
     total_ded = pf_ded + esic_ded + pt_ded + adv_ded + ppe_ded
-
     net_salary = total_gross - total_ded
 
     calc_table_data = [
@@ -527,49 +523,52 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
         ["Basic", f"{rate_basic:,.2f}", f"{earned_basic:,.2f}", "Provident Fund (PF)", f"{pf_ded:,.2f}"],
         ["D.A.", f"{rate_da:,.2f}", f"{earned_da:,.2f}", "ESIC", f"{esic_ded:,.2f}"],
         ["H.R.A.", f"{rate_hra:,.2f}", f"{earned_hra:,.2f}", "Prof. Tax (PT)", f"{pt_ded:,.2f}"],
-        ["Overtime (OT)", "-", f"{ot_amt:,.2f}", "Salary Advance", f"{adv_ded:,.2f}"],
-        ["", "", "", "Uniform / PPE", f"{ppe_ded:,.2f}"],
+        ["Overtime Pay (OT)", "-", f"{ot_amt:,.2f}", "Salary Advance", f"{adv_ded:,.2f}"],
+        ["", "", "", "Uniform / PPE Deduction", f"{ppe_ded:,.2f}"],
         ["Gross Earning", "", f"{total_gross:,.2f}", "Total Deductions", f"{total_ded:,.2f}"]
     ]
 
     t_calc = Table(calc_table_data, colWidths=[120, 80, 80, 202, 80])
     t_calc.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F1F5F9")),
         ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F8FAFC")),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#F8FAFC")),
         ('ALIGN', (1,1), (2,-1), 'RIGHT'),
         ('ALIGN', (4,1), (4,-1), 'RIGHT'),
         ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
-        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
     ]))
     story.append(t_calc)
 
-    # Net Salary Row
+    # Net Salary
     t_net = Table([["Net Salary", f"Rs. {net_salary:,.2f}"]], colWidths=[280, 282])
     t_net.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
         ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 8.5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#EFF6FF")),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
     ]))
     story.append(t_net)
 
-    # Amount in Words & Remarks
+    # In words & Note
     t_words = Table([
-        [Paragraph(f"<b>Amount in Words:</b> {num_to_words(net_salary)}", styles["Normal"])],
-        [Paragraph("<b>Remarks:</b> -", styles["Normal"])],
-        [Paragraph("<font size=7.5>This is computer generated payslip and does not require any signature.</font>", ParagraphStyle(name="CenterNote", alignment=1))]
+        [Paragraph(f"<b>Amount in Words:</b> <b>{num_to_words(net_salary)}</b>", styles["Normal"])],
+        [Paragraph("<b>Remarks:</b> Salary calculated based on monthly attendance muster.", styles["Normal"])],
+        [Paragraph("<font size=7 color='#64748B'><i>This is a computer-generated salary slip and does not require any signature.</i></font>", ParagraphStyle(name="NoteP", alignment=1))]
     ], colWidths=[562])
     t_words.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
     ]))
     story.append(t_words)
 
@@ -1573,7 +1572,13 @@ else:
                     )
                 with col_lk2:
                     if st.button("🔒 Dual-Confirm & Lock Wage Sheet", type="primary"):
-                        st.success(f"✅ Wage Sheet for {sel_month} locked and forwarded!")
+                        if sel_ent_name != "All Entities" and e_opts.get(sel_ent_name):
+                            supabase.table("locked_payrolls").upsert({
+                                "entity_id": e_opts[sel_ent_name],
+                                "payroll_month": sel_month,
+                                "is_locked": True
+                            }, on_conflict="entity_id,payroll_month").execute()
+                        st.success(f"✅ Wage Sheet for {sel_month} locked! Now visible to employees.")
             else:
                 st.info("No approved employees found for the selected entity filter.")
 
@@ -2577,77 +2582,105 @@ else:
         # 4. MONTHLY PAYSLIPS PANEL
         elif selected_emp_panel == "Monthly Payslips (15th)":
             st.subheader("Month-Wise Salary Payslips / मासिक पगार स्लिप")
-            st.caption("Official payslips are generated on the 15th of every month.")
+            st.caption("Official payslips are generated on the 15th of every month following payroll closure.")
             
             sel_m = st.selectbox("Select Payroll Month", ["September 2026", "August 2026", "July 2026"])
             
-            ent_obj = next((e for e in fetch_cached_entities() if e["id"] == emp.get("entity_id")), None)
-            cli_name = next((c["name"] for c in fetch_cached_clients() if c["id"] == emp.get("client_id")), "Plant Site")
-            
-            # सॅलरी रूल शोधणे
-            sal_rule = None
+            # १. वेज शीट ॲडमिनने लॉक केली आहे का ते तपासणे
+            is_sheet_locked = False
             try:
-                sr = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
-                if sr: sal_rule = sr[0]
-            except Exception: pass
-            
-            b_pay = float(sal_rule.get("basic", 14010.0)) if sal_rule else 14010.0
-            d_pay = float(sal_rule.get("da", 2511.0)) if sal_rule else 2511.0
-            h_pay = float(sal_rule.get("hra", 826.0)) if sal_rule else 826.0
-            o_pay = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
-            ot_rate = float(sal_rule.get("ot_rate_per_hour", 120.0)) if sal_rule else 120.0
+                chk_lock = supabase.table("locked_payrolls").select("*").eq("entity_id", emp.get("entity_id")).eq("payroll_month", sel_m).eq("is_locked", True).execute().data
+                if chk_lock:
+                    is_sheet_locked = True
+            except Exception:
+                is_sheet_locked = False
 
-            # अटेंडन्स गोळा करणे
-            p_days = 26.0
-            ot_hrs = 0.0
-            try:
-                att_recs = supabase.table("attendance").select("status, ot_hours").eq("employee_id", emp["id"]).execute().data or []
-                if att_recs:
-                    p_days = len([a for a in att_recs if a.get("status") in ["P", "WO", "PH"]]) + (len([a for a in att_recs if a.get("status") == "HD"]) * 0.5)
-                    ot_hrs = sum([float(a.get("ot_hours") or 0.0) for a in att_recs])
-            except Exception: pass
+            if not is_sheet_locked:
+                st.warning(f"⏳ **{sel_m} ची वेज शीट अद्याप ॲडमिन पोर्टलवरून अंतिम (Lock) झालेली नाही.**\n\nमहिन्याची वेज शीट लॉक झाल्यानंतर आणि पुढील महिन्याच्या १५ तारखेला ही स्लिप येथे उपलब्ध होईल.")
+            else:
+                ent_obj = next((e for e in fetch_cached_entities() if e["id"] == emp.get("entity_id")), None)
+                cli_name = next((c["name"] for c in fetch_cached_clients() if c["id"] == emp.get("client_id")), "Plant Site")
+                
+                # अचूक सॅलरी रूल शोधणे
+                sal_rule = None
+                try:
+                    sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id"))
+                    if emp.get("client_id"):
+                        sr_query = sr_query.eq("client_id", emp.get("client_id"))
+                    if emp.get("designation"):
+                        sr_query = sr_query.ilike("designation", emp.get("designation").strip())
+                    if emp.get("category"):
+                        sr_query = sr_query.eq("category", emp.get("category").strip())
+                    s_matched = sr_query.execute().data
+                    if s_matched:
+                        sal_rule = s_matched[0]
+                    else:
+                        fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
+                        if fallback_res:
+                            sal_rule = fallback_res[0]
+                except Exception:
+                    pass
+                
+                b_pay = float(sal_rule.get("basic", 14010.0)) if sal_rule else 14010.0
+                d_pay = float(sal_rule.get("da", 2511.0)) if sal_rule else 2511.0
+                h_pay = float(sal_rule.get("hra", 826.0)) if sal_rule else 826.0
+                o_pay = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
+                ot_rate = float(sal_rule.get("ot_rate_per_hour", 120.0)) if sal_rule else 120.0
 
-            e_basic = round((b_pay / 26.0) * p_days, 2)
-            e_da = round((d_pay / 26.0) * p_days, 2)
-            e_hra = round((h_pay / 26.0) * p_days, 2)
-            e_other = round((o_pay / 26.0) * p_days, 2)
-            e_ot = round(ot_hrs * ot_rate, 2)
-            t_gross = e_basic + e_da + e_hra + e_other + e_ot
+                # प्रत्यक्ष हजेरी आणि ओटी तास
+                p_days = 26.0
+                ot_hrs = 0.0
+                try:
+                    att_recs = supabase.table("attendance").select("status, ot_hours").eq("employee_id", emp["id"]).execute().data or []
+                    if att_recs:
+                        p_days = len([a for a in att_recs if a.get("status") in ["P", "WO", "PH"]]) + (len([a for a in att_recs if a.get("status") == "HD"]) * 0.5)
+                        ot_hrs = sum([float(a.get("ot_hours") or 0.0) for a in att_recs])
+                except Exception:
+                    pass
 
-            # पीएफ सीलिंग (₹15,000 वयर आसल्यार कमाल ₹1,800)
-            pf_d = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
-            esic_d = round(t_gross * 0.0075, 2)
-            pt_d = 200.0 if t_gross > 10000 else 0.0
+                e_basic = round((b_pay / 26.0) * p_days, 2)
+                e_da = round((d_pay / 26.0) * p_days, 2)
+                e_hra = round((h_pay / 26.0) * p_days, 2)
+                e_other = round((o_pay / 26.0) * p_days, 2)
+                e_ot = round(ot_hrs * ot_rate, 2)
+                t_gross = e_basic + e_da + e_hra + e_other + e_ot
 
-            # Advance & PPE डिडक्शन
-            adv_d = 0.0
-            try:
-                adv_res = supabase.table("advance_salaries").select("amount").eq("employee_id", emp["id"]).eq("status", "APPROVED").execute().data or []
-                adv_d = sum([float(a.get("amount") or 0.0) for a in adv_res])
-            except Exception: pass
+                # पीएफ सीलिंग (₹15,000 पेक्षा जास्त असल्यास कमाल ₹1,800)
+                pf_d = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
+                esic_d = round(t_gross * 0.0075, 2)
+                pt_d = 200.0 if t_gross > 10000 else 0.0
 
-            ppe_d = 0.0
-            try:
-                ppe_res = supabase.table("ppe_records").select("cost").eq("employee_id", emp["id"]).eq("deduction_month", sel_m).eq("status", "APPROVED").execute().data or []
-                ppe_d = sum([float(p.get("cost") or 0.0) for p in ppe_res])
-            except Exception: pass
+                # प्रत्यक्ष ॲडव्हान्स आणि PPE कपात
+                adv_d = 0.0
+                try:
+                    adv_res = supabase.table("advance_salaries").select("amount").eq("employee_id", emp["id"]).eq("status", "APPROVED").execute().data or []
+                    adv_d = sum([float(a.get("amount") or 0.0) for a in adv_res])
+                except Exception:
+                    pass
 
-            deductions_payload = {
-                'earned_basic': e_basic, 'earned_da': e_da, 'earned_hra': e_hra, 'earned_other': e_other,
-                'ot_amount': e_ot, 'pf_ded': pf_d, 'esic_ded': esic_d, 'pt_ded': pt_d,
-                'adv_val': adv_d, 'ppe_ded': ppe_d
-            }
-            att_summary_payload = {'paid_days': p_days, 'total_days': 26, 'ot_hours': ot_hrs}
+                ppe_d = 0.0
+                try:
+                    ppe_res = supabase.table("ppe_records").select("cost").eq("employee_id", emp["id"]).eq("deduction_month", sel_m).eq("status", "APPROVED").execute().data or []
+                    ppe_d = sum([float(p.get("cost") or 0.0) for p in ppe_res])
+                except Exception:
+                    pass
 
-            # खरी सॅलरी स्लिप तयार करणे
-            payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
+                deductions_payload = {
+                    'earned_basic': e_basic, 'earned_da': e_da, 'earned_hra': e_hra, 'earned_other': e_other,
+                    'ot_amount': e_ot, 'pf_ded': pf_d, 'esic_ded': esic_d, 'pt_ded': pt_d,
+                    'adv_val': adv_d, 'ppe_ded': ppe_d
+                }
+                att_summary_payload = {'paid_days': p_days, 'total_days': 26, 'ot_hours': ot_hrs}
 
-            st.download_button(
-                f"📥 Download Official Payslip ({sel_m})",
-                data=payslip_pdf_bytes,
-                file_name=f"Payslip_{sel_m.replace(' ', '_')}_{emp.get('employee_code')}.pdf",
-                mime="application/pdf"
-            )
+                # अंतिम सॅलरी स्लिप तयार करणे
+                payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
+
+                st.download_button(
+                    f"📥 Download Official Payslip ({sel_m})",
+                    data=payslip_pdf_bytes,
+                    file_name=f"Payslip_{sel_m.replace(' ', '_')}_{emp.get('employee_code')}.pdf",
+                    mime="application/pdf"
+                )
 
         # 5. DOCUMENTS VAULT PANEL
         elif selected_emp_panel == "Official Documents Vault":
