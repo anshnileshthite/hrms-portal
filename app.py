@@ -16,7 +16,7 @@ from reportlab.lib import colors
 # -------------------------------------------------------------
 # 1. PAGE CONFIGURATION & CACHING
 # -------------------------------------------------------------
-st.set_page_config(page_title="HRMS Enterprise Cloud", layout="wide")
+st.set_page_config(page_title="ESS PORTAL", layout="wide")
 
 @st.cache_data(ttl=300)
 def fetch_cached_entities():
@@ -406,7 +406,7 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
 # 3. PUBLIC INTERFACE
 # =============================================================================
 if not st.session_state.user:
-    st.markdown('<div class="main-title">HRMS Enterprise Cloud</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">ESS PORTAL</div>', unsafe_allow_html=True)
     tab_signin, tab_join = st.tabs(["Sign In", "Candidate Paperless Joining Form"])
 
     with tab_signin:
@@ -496,7 +496,7 @@ else:
     # -------------------------------------------------------------------------
     if active_role == "admin":
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS Enterprise</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">Logged In: ADMIN</div>', unsafe_allow_html=True)
             st.caption("ADMIN DESK")
 
@@ -729,12 +729,29 @@ else:
                             
                             c1, c2 = st.columns(2)
                             if c1.form_submit_button("Update Entity", type="primary"):
-                                supabase.table("entities").update({
-                                    "name": en_up_name, "address": en_up_addr, "gst_number": en_up_gst, "pan_number": en_up_pan
-                                }).eq("id", curr_e["id"]).execute()
-                                st.cache_data.clear()
-                                st.success("✅ Data Updated Successfully: Entity refreshed!")
-                                st.rerun()
+                                update_payload = {
+                                    "name": en_up_name, 
+                                    "address": en_up_addr, 
+                                    "gst_number": en_up_gst
+                                }
+                                if en_up_pan:
+                                    update_payload["pan_number"] = en_up_pan
+
+                                try:
+                                    supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
+                                    st.cache_data.clear()
+                                    st.success("✅ Data Updated Successfully: Entity refreshed!")
+                                    st.rerun()
+                                except Exception as e:
+                                    if "pan_number" in str(e):
+                                        update_payload.pop("pan_number", None)
+                                        supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
+                                        st.cache_data.clear()
+                                        st.success("✅ Data Updated Successfully (Without PAN): Entity refreshed!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error updating entity: {e}")
+
                             if c2.form_submit_button("🗑️ Delete Entity"):
                                 supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
                                 st.cache_data.clear()
@@ -1401,7 +1418,7 @@ else:
             st.session_state.active_sup_tab = "Candidate Verification"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS Enterprise</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">● Logged In: SUPERVISOR</div>', unsafe_allow_html=True)
             st.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
             st.caption("SUPERVISOR DESK")
@@ -1442,15 +1459,12 @@ else:
                     with st.expander(f"📋 Applicant: {c['full_name']} (Mobile: {c['phone_number']})"):
                         v_col1, v_col2 = st.columns(2)
                         
-                        # 1. Entity & Client निवडण्याचा अधिकार
                         s_ent = v_col1.selectbox("Assign Entity Provider / फर्म निवडा *", list(e_dict.keys()) if e_dict else ["No Entity"], key=f"sup_ent_{c['id']}")
                         s_cli = v_col2.selectbox("Assign Client Work Site / प्लांट लोकेशन *", list(c_dict.keys()) if c_dict else ["No Client"], key=f"sup_cli_{c['id']}")
 
-                        # 2. पद आणि शिफ्ट
                         s_desig = v_col1.text_input("Assign Designation / पद निवडा *", value=c.get("designation") or "Associate", key=f"desig_{c['id']}")
                         s_shift = v_col2.selectbox("Assign Shift Schedule / शिफ्ट वेळ *", STANDARD_SHIFTS, key=f"shift_{c['id']}")
 
-                        # 3. जॉइनिंग डेट आणि आठवडी सुट्टी (Weekly Off)
                         s_join_date = v_col1.date_input("Assign Joining Date / कामावर रुजू होण्याची तारीख *", value=date.today(), key=f"join_{c['id']}")
                         s_wo = v_col2.selectbox("Assign Weekly Off Day / आठवडी सुट्टीचा वार *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0, key=f"wo_{c['id']}")
 
@@ -1556,7 +1570,7 @@ else:
             st.session_state.active_client_tab = "Plant Workforce Overview"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS Enterprise</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">● Logged In: CLIENT DESK</div>', unsafe_allow_html=True)
             st.write(f"Authorized Rep: **{st.session_state.user.get('full_name')}**")
             st.caption("CLIENT PORTAL")
@@ -1627,7 +1641,7 @@ else:
             st.session_state.active_emp_tab = "Daily Punch (Geofenced)"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS Enterprise</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="logged-badge">● Logged In: EMPLOYEE ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
             st.write(f"User: **{emp.get('full_name')}**")
             st.caption("ESS PORTAL")
