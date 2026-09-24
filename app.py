@@ -1092,8 +1092,52 @@ else:
         # 5. PPE & UNIFORM TRACKER
         elif selected_panel == "PPE & Uniform Tracker":
             st.subheader("PPE & Uniform Tracker (Management Desk)")
-            tab_ppe_issue, tab_ppe_edit, tab_ppe_req = st.tabs(["➕ Issue / Add PPE", "✏️ Edit / Delete PPE", "📋 Pending Requests"])
+            tab_ppe_issue, tab_ppe_edit, tab_ppe_req, tab_ppe_cat = st.tabs([
+                "➕ Issue / Add PPE", 
+                "✏️ Edit / Delete PPE", 
+                "📋 Pending Requests",
+                "🏷️ PPE Price Catalog"
+            ])
+            with tab_ppe_cat:
+                st.write("##### 🏷️ Entity & Client Wise PPE Pricing Master")
+                with st.form("add_ppe_catalog_form"):
+                    cat_c1, cat_c2 = st.columns(2)
+                    cat_ent = cat_c1.selectbox("Select Entity / फर्म *", list(p_e_map.keys()) if p_e_map else ["No Entity"])
+                    cat_cli = cat_c2.selectbox("Select Client Site / कंपनी *", list(p_c_map.keys()) if p_c_map else ["No Client"])
 
+                    cat_c3, cat_c4 = st.columns(2)
+                    cat_item = cat_c3.text_input("PPE Item Name * (उदा. Safety Shoes, Helmet, Uniform Shirt/Pant)")
+                    cat_price = cat_c4.number_input("Unit Price / किंमत (₹) *", min_value=0.0, step=10.0, value=100.0)
+
+                    if st.form_submit_button("Save Item in Catalog / दर जतन करा", type="primary"):
+                        if cat_item and p_e_map and p_c_map:
+                            try:
+                                supabase.table("ppe_catalog").upsert({
+                                    "entity_id": p_e_map[cat_ent],
+                                    "client_id": p_c_map[cat_cli],
+                                    "item_name": cat_item.strip(),
+                                    "price": cat_price
+                                }, on_conflict="entity_id,client_id,item_name").execute()
+                                st.success(f"✅ {cat_item} चे दर (₹{cat_price:,.2f}) जतन झाले!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving catalog: {e}")
+
+                st.write("---")
+                st.write("##### 📋 Live Configured PPE Catalog Rates")
+                catalog_data = supabase.table("ppe_catalog").select("*").execute().data or []
+                if catalog_data:
+                    cat_rows = []
+                    for c_item in catalog_data:
+                        cat_rows.append({
+                            "Entity": ent_name_lookup.get(c_item.get("entity_id"), "N/A"),
+                            "Client Site": cli_name_lookup.get(c_item.get("client_id"), "N/A"),
+                            "Item Name": c_item.get("item_name"),
+                            "Rate (₹)": f"₹{float(c_item.get('price', 0)):,.2f}"
+                        })
+                    st.dataframe(pd.DataFrame(cat_rows), use_container_width=True)
+                else:
+                    st.info("अद्याप कोणत्याही PPE वस्तूंचे दर सेट केलेले नाहीत.")
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
             emp_list = fetch_cached_employees()
@@ -1306,9 +1350,19 @@ else:
                     try:
                         adv_recs = supabase.table("advance_salaries").select("amount").eq("employee_id", emp_item["id"]).eq("status", "APPROVED").execute().data or []
                         adv_val = sum([float(a.get("amount") or 0.0) for a in adv_recs])
-                    except Exception: pass
+                    except Exception: 
+                        pass
 
-                    total_deductions = pf_ded + esic_ded + pt_ded + adv_val
+                    # --- नवीन: PPE / Uniform Deduction फेच करणे ---
+                    ppe_ded = 0.0
+                    try:
+                        ppe_recs = supabase.table("ppe_records").select("cost").eq("employee_id", emp_item["id"]).eq("deduction_month", sel_month).eq("status", "APPROVED").execute().data or []
+                        ppe_ded = sum([float(p.get("cost") or 0.0) for p in ppe_recs])
+                    except Exception:
+                        pass
+
+                    # Total Deductions सूत्र अपडेट (Advance + PPE समावेश)
+                    total_deductions = pf_ded + esic_ded + pt_ded + adv_val + ppe_ded
                     net_take_home = round(total_gross - total_deductions, 2)
 
                     # Employer Contributions & CTC
@@ -1365,6 +1419,7 @@ else:
                         "ESIC 0.75%": esic_ded,
                         "Professional Tax": pt_ded,
                         "Advance": adv_val,
+                        "PPE / Uniform Deduction": ppe_ded,  # <--- नवीन कॉलम
                         "Total Deductions": total_deductions,
                         "Net Wages": net_take_home,
                         "Employer PF 13%": pf_er,
@@ -2396,10 +2451,73 @@ else:
         elif selected_emp_panel == "Monthly Payslips (15th)":
             st.subheader("Month-Wise Salary Payslips / मासिक पगार स्लिप")
             st.caption("Official payslips are generated on the 15th of every month.")
+            
             sel_m = st.selectbox("Select Payroll Month", ["September 2026", "August 2026", "July 2026"])
+            
+            ent_obj = next((e for e in fetch_cached_entities() if e["id"] == emp.get("entity_id")), None)
+            cli_name = next((c["name"] for c in fetch_cached_clients() if c["id"] == emp.get("client_id")), "Plant Site")
+            
+            # सॅलरी रूल शोधणे
+            sal_rule = None
+            try:
+                sr = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
+                if sr: sal_rule = sr[0]
+            except Exception: pass
+            
+            b_pay = float(sal_rule.get("basic", 14010.0)) if sal_rule else 14010.0
+            d_pay = float(sal_rule.get("da", 2511.0)) if sal_rule else 2511.0
+            h_pay = float(sal_rule.get("hra", 826.0)) if sal_rule else 826.0
+            o_pay = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
+            ot_rate = float(sal_rule.get("ot_rate_per_hour", 120.0)) if sal_rule else 120.0
+
+            # अटेंडन्स गोळा करणे
+            p_days = 26.0
+            ot_hrs = 0.0
+            try:
+                att_recs = supabase.table("attendance").select("status, ot_hours").eq("employee_id", emp["id"]).execute().data or []
+                if att_recs:
+                    p_days = len([a for a in att_recs if a.get("status") in ["P", "WO", "PH"]]) + (len([a for a in att_recs if a.get("status") == "HD"]) * 0.5)
+                    ot_hrs = sum([float(a.get("ot_hours") or 0.0) for a in att_recs])
+            except Exception: pass
+
+            e_basic = round((b_pay / 26.0) * p_days, 2)
+            e_da = round((d_pay / 26.0) * p_days, 2)
+            e_hra = round((h_pay / 26.0) * p_days, 2)
+            e_other = round((o_pay / 26.0) * p_days, 2)
+            e_ot = round(ot_hrs * ot_rate, 2)
+            t_gross = e_basic + e_da + e_hra + e_other + e_ot
+
+            # पीएफ सीलिंग
+            pf_d = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
+            esic_d = round(t_gross * 0.0075, 2)
+            pt_d = 200.0 if t_gross > 10000 else 0.0
+
+            # Advance & PPE डिडक्शन
+            adv_d = 0.0
+            try:
+                adv_res = supabase.table("advance_salaries").select("amount").eq("employee_id", emp["id"]).eq("status", "APPROVED").execute().data or []
+                adv_d = sum([float(a.get("amount") or 0.0) for a in adv_res])
+            except Exception: pass
+
+            ppe_d = 0.0
+            try:
+                ppe_res = supabase.table("ppe_records").select("cost").eq("employee_id", emp["id"]).eq("deduction_month", sel_m).eq("status", "APPROVED").execute().data or []
+                ppe_d = sum([float(p.get("cost") or 0.0) for p in ppe_res])
+            except Exception: pass
+
+            deductions_payload = {
+                'earned_basic': e_basic, 'earned_da': e_da, 'earned_hra': e_hra, 'earned_other': e_other,
+                'ot_amount': e_ot, 'pf_ded': pf_d, 'esic_ded': esic_d, 'pt_ded': pt_d,
+                'adv_val': adv_d, 'ppe_ded': ppe_d
+            }
+            att_summary_payload = {'paid_days': p_days, 'ot_hours': ot_hrs}
+
+            # खरी सॅलरी स्लिप तयार करणे
+            payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
+
             st.download_button(
-                f"📥 Download Payslip ({sel_m})",
-                data=b"Official Salary Slip PDF Content",
+                f"📥 Download Official Payslip ({sel_m})",
+                data=payslip_pdf_bytes,
                 file_name=f"Payslip_{sel_m.replace(' ', '_')}_{emp.get('employee_code')}.pdf",
                 mime="application/pdf"
             )
@@ -2442,6 +2560,92 @@ else:
             with d1:
                 st.markdown("##### 📑 Official Offer Letter / अधिकृत ऑफर लेटर")
                 off_data = generate_official_offer_letter(emp, ent_val, assigned_client_name, sal_rule)
+                def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    story = []
+
+    entity_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
+    ent_addr = entity_obj.get("address", "") if entity_obj else ""
+
+    # Header
+    title_p = Paragraph(f"<font size=13><b>{entity_name}</b></font><br/><font size=8>{ent_addr}</font><br/><font size=10><b>PAYSLIP FOR THE MONTH OF {month_str.upper()}</b></font>", ParagraphStyle(name="CenterPayslipTitle", alignment=1))
+    story.append(title_p)
+    story.append(Spacer(1, 10))
+
+    # Employee Info Table
+    emp_table_data = [
+        [f"Employee ID: {emp_data.get('employee_code', 'N/A')}", f"Name: {emp_data.get('full_name')}"],
+        [f"Designation: {emp_data.get('designation', 'Staff')}", f"Client Site: {client_name}"],
+        [f"UAN: {emp_data.get('uan_number', 'N/A')}", f"ESIC: {emp_data.get('esic_number', 'N/A')}"],
+        [f"Bank A/C: {emp_data.get('bank_account_no', 'N/A')}", f"IFSC: {emp_data.get('ifsc_code', 'N/A')}"],
+        [f"Present Days: {att_summary.get('paid_days', 26)}", f"OT Hours: {att_summary.get('ot_hours', 0.0)}"]
+    ]
+    t_info = Table(emp_table_data, colWidths=[270, 270])
+    t_info.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 3),
+    ]))
+    story.append(t_info)
+    story.append(Spacer(1, 10))
+
+    # Earnings & Deductions Calculations
+    earned_basic = deductions_data.get('earned_basic', 0.0)
+    earned_da = deductions_data.get('earned_da', 0.0)
+    earned_hra = deductions_data.get('earned_hra', 0.0)
+    earned_other = deductions_data.get('earned_other', 0.0)
+    ot_amt = deductions_data.get('ot_amount', 0.0)
+    gross_pay = earned_basic + earned_da + earned_hra + earned_other + ot_amt
+
+    pf_val = deductions_data.get('pf_ded', 0.0)
+    esic_val = deductions_data.get('esic_ded', 0.0)
+    pt_val = deductions_data.get('pt_ded', 0.0)
+    adv_val = deductions_data.get('adv_val', 0.0)
+    ppe_val = deductions_data.get('ppe_ded', 0.0)  # <--- PPE कपात
+    total_ded = pf_val + esic_val + pt_val + adv_val + ppe_val
+    net_pay = gross_pay - total_ded
+
+    # Breakdown Table
+    breakdown_data = [
+        ["EARNINGS", "AMOUNT (₹)", "DEDUCTIONS", "AMOUNT (₹)"],
+        ["Basic Pay", f"{earned_basic:,.2f}", "Provident Fund (PF)", f"{pf_val:,.2f}"],
+        ["Dearness Allowance (DA)", f"{earned_da:,.2f}", "ESIC", f"{esic_val:,.2f}"],
+        ["House Rent Allowance (HRA)", f"{earned_hra:,.2f}", "Professional Tax (PT)", f"{pt_val:,.2f}"],
+        ["Other Allowances", f"{earned_other:,.2f}", "Salary Advance", f"{adv_val:,.2f}"],
+        ["Overtime Pay (OT)", f"{ot_amt:,.2f}", "PPE / Uniform Deduction", f"{ppe_val:,.2f}"],
+        ["Total Gross Earnings", f"₹ {gross_pay:,.2f}", "Total Deductions", f"₹ {total_ded:,.2f}"],
+        ["", "", "NET TAKE HOME PAY", f"₹ {net_pay:,.2f}"]
+    ]
+    t_breakdown = Table(breakdown_data, colWidths=[160, 110, 160, 110])
+    t_breakdown.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F1F5F9")),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,-2), (-1,-1), 'Helvetica-Bold'),
+        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('ALIGN', (3,0), (3,-1), 'RIGHT'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    story.append(t_breakdown)
+    story.append(Spacer(1, 10))
+
+    words_p = Paragraph(f"<b>Amount in words:</b> {num_to_words(net_pay)}", styles["Normal"])
+    story.append(words_p)
+    story.append(Spacer(1, 25))
+
+    # Sign-off
+    sign_table = Table([["Employee Signature", "Authorized Signatory"]], colWidths=[270, 270])
+    sign_table.setStyle(TableStyle([('ALIGN', (1,0), (1,0), 'RIGHT'), ('FONTSIZE', (0,0), (-1,-1), 8)]))
+    story.append(sign_table)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
                 st.download_button("📥 Download Offer Letter (PDF)", data=off_data, file_name=f"Offer_{emp.get('employee_code')}.pdf", mime="application/pdf")
             with d2:
                 st.markdown("##### 🪪 Statutory ESIC Card / ईएसआयसी कार्ड")
@@ -2450,23 +2654,43 @@ else:
         # 6. PPE REQUEST PANEL
         elif selected_emp_panel == "Request PPE Equipment":
             st.subheader("Request Safety Equipment / PPE / सुरक्षा साधनांची मागणी")
-            with st.form("emp_ppe_standalone_form"):
-                p_item = st.selectbox("Safety Equipment Required", ["Safety Shoes", "Helmet", "Safety Goggles", "Uniform Shirt/Pant", "ID Card"])
-                p_size = st.text_input("Size (e.g. 8, 9, L, XL)")
-                p_qty = st.number_input("Quantity", min_value=1, value=1)
-                if st.form_submit_button("Submit PPE Request", type="primary"):
-                    try:
-                        supabase.table("ppe_records").insert({
-                            "employee_id": emp["id"],
-                            "item_type": p_item,
-                            "size": p_size,
-                            "quantity": p_qty,
-                            "status": "PENDING_SUPERVISOR",
-                            "assigned_date": today_str
-                        }).execute()
-                        st.success("✅ Data Saved Successfully: PPE request sent to Supervisor!")
-                    except Exception as e:
-                        st.error(f"Error submitting PPE request: {e}")
+            
+            # कर्मचाऱ्याच्या Entity व Client नुसार लाइव्ह कॅटलॉग लोड करणे
+            emp_catalog = []
+            try:
+                emp_catalog = supabase.table("ppe_catalog").select("item_name, price").eq("entity_id", emp.get("entity_id")).eq("client_id", emp.get("client_id")).execute().data or []
+            except Exception:
+                emp_catalog = []
+
+            price_lookup = {item["item_name"]: float(item["price"]) for item in emp_catalog}
+
+            if not price_lookup:
+                st.warning("⚠️ तुमच्या प्लांट लोकेशनसाठी ॲडमिनने अद्याप PPE दर निश्चित केलेले नाहीत. कृपया सुपरवायझरशी संपर्क साधा.")
+            else:
+                with st.form("emp_ppe_standalone_form"):
+                    p_item = st.selectbox("Safety Equipment Required", list(price_lookup.keys()))
+                    unit_price = price_lookup.get(p_item, 0.0)
+                    
+                    p_size = st.text_input("Size (e.g. 8, 9, L, XL)")
+                    p_qty = st.number_input("Quantity", min_value=1, value=1)
+                    total_calculated_cost = unit_price * p_qty
+
+                    st.info(f"💰 **प्रति नग किंमत:** ₹{unit_price:,.2f} | **एकूण कपात:** ₹{total_calculated_cost:,.2f} (सदर रक्कम आगामी सॅलरीतून वजा होईल)")
+
+                    if st.form_submit_button("Submit PPE Request", type="primary"):
+                        try:
+                            supabase.table("ppe_records").insert({
+                                "employee_id": emp["id"],
+                                "item_type": p_item,
+                                "size": p_size,
+                                "quantity": p_qty,
+                                "cost": total_calculated_cost,
+                                "status": "PENDING_SUPERVISOR",
+                                "assigned_date": today_str
+                            }).execute()
+                            st.success("✅ PPE मागणी सुपरवायझरकडे पाठवली आहे!")
+                        except Exception as e:
+                            st.error(f"Error submitting PPE request: {e}")
 
         # 7. ADVANCE SALARY PANEL
         elif selected_emp_panel == "Request Salary Advance":
