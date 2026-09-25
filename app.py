@@ -806,7 +806,6 @@ else:
                         if not me_code or not me_name or not me_phone:
                             st.error("Employee Code, Full Name, and Mobile Number are mandatory!")
                         else:
-                            # Check duplicate Employee Code
                             dup_chk = supabase.table("employees").select("id").eq("employee_code", me_code).execute().data
                             if dup_chk:
                                 st.error(f"Error: Employee Code '{me_code}' is already assigned to another employee! Please use a unique code.")
@@ -836,7 +835,6 @@ else:
             with tab_edit_emp:
                 all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if all_emps:
-                    # Guarantees Unique Key in dropdown using employee ID
                     emp_opt_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (ID: {e['id'][:6]})": e for e in all_emps}
                     sel_emp_to_edit = st.selectbox("Select Employee to Update / Delete", list(emp_opt_map.keys()))
                     curr_selected = emp_opt_map[sel_emp_to_edit]
@@ -900,7 +898,7 @@ else:
                         up_uan = st1.text_input("UAN Number", value=curr_selected.get("uan_number", ""))
                         up_esic = st2.text_input("ESIC Number", value=curr_selected.get("esic_number", ""))
                         up_pan = st3.text_input("PAN Number", value=curr_selected.get("pan_number", ""))
-                        up_aadhar = st4.text_input("Aadhaar Number", value=str(curr_selected.get("aadhar_number") or ""))
+                        up_aadhar = st4.text_input("Aadhaar Number", value=str(emp.get("aadhar_number") or ""))
 
                         bk1, bk2, bk3, bk4 = st.columns(4)
                         up_bank = bk1.text_input("Bank Name", value=curr_selected.get("bank_name", ""))
@@ -911,7 +909,6 @@ else:
                         st.write("---")
                         c_btn1, c_btn2 = st.columns(2)
                         if c_btn1.form_submit_button("Update Employee Data", type="primary"):
-                            # Validate Duplicate Code across other employees
                             if up_code:
                                 dup_code_other = supabase.table("employees").select("id").eq("employee_code", up_code).neq("id", curr_selected["id"]).execute().data
                                 if dup_code_other:
@@ -1027,7 +1024,6 @@ else:
 
                         col_act1, col_act2 = st.columns(2)
                         if col_act1.button("Approve & Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
-                            # Check duplicate Code
                             dup_chk = supabase.table("employees").select("id").eq("employee_code", set_user_id).neq("id", cand["id"]).execute().data
                             if dup_chk:
                                 st.error(f"Error: Employee Code '{set_user_id}' is already taken! Please assign a unique code.")
@@ -1110,7 +1106,7 @@ else:
                     a_ctc = round(m_ctc * 12, 2)
 
                     st.markdown(f"""
-                    <div style="background-color: #F1F5F9; border-left: 4px solid #0284C7; padding: 10px; border-radius: 4px; margin: 10px 0px;">
+                    <div style="background-color: #F1F5F9; border-left: 4px solid #0284C7; padding: 10px; border-radius: 4px; margin-login: 10px 0px;">
                         <b>Gross Wages:</b> Rs.{gross:,.2f}/month | 
                         <b>Employer PF:</b> Rs.{er_pf_val:,.2f} | 
                         <b>Employer ESIC:</b> Rs.{er_esic_val:,.2f}<br>
@@ -1806,7 +1802,14 @@ else:
                                     pytime.sleep(1)
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"Error updating entity: {e}")
+                                    if "pan_number" in str(e):
+                                        update_payload.pop("pan_number", None)
+                                        supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
+                                        st.cache_data.clear()
+                                        st.success("Entity refreshed successfully!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error updating entity: {e}")
 
                             if c2.form_submit_button("Delete Entity"):
                                 supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
@@ -1917,7 +1920,7 @@ else:
                             except Exception as e:
                                 st.error(f"Error saving PH: {e}")
 
-        # 11. User Roles & Access (Full Entity, Client & Role Edit Support)
+        # 11. User Roles & Access
         elif selected_panel == "User Roles & Access":
             st.subheader("User Roles & Access Control")
             t_u_add, t_u_edit = st.tabs(["Create User Access", "Edit / Delete User Access"])
@@ -2007,15 +2010,12 @@ else:
                                 st.error(f"Error updating user: {e}")
 
                         if b_col2.form_submit_button("Delete User Access"):
-                            try:
-                                supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
-                                st.cache_data.clear()
-                                st.toast("🗑️ User access revoked!")
-                                st.warning("User access revoked successfully!")
-                                pytime.sleep(1)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error deleting user: {e}")
+                            supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
+                            st.cache_data.clear()
+                            st.toast("🗑️ User access revoked!")
+                            st.warning("User access revoked successfully!")
+                            pytime.sleep(1)
+                            st.rerun()
                 else:
                     st.info("No user access accounts configured yet.")
 
@@ -2106,7 +2106,6 @@ else:
                         
                         s_wo = v_col2.selectbox("Assign Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0, key=f"wo_{c['id']}")
 
-                        st.write("---")
                         col_act1, col_act2 = st.columns([2, 5])
                         if col_act1.button("Verify & Forward to Admin", key=f"fwd_{c['id']}", type="primary"):
                             try:
@@ -2320,7 +2319,7 @@ else:
         selected_emp_panel = st.session_state.active_emp_tab
         st.title(selected_emp_panel)
 
-        # 1. PUNCH PANEL (Strict 15m Geofence)
+        # 1. PUNCH PANEL (Direct Form Auto-Sync Location)
         if selected_emp_panel == "Daily Punch (Geofenced)":
             st.subheader("Daily Attendance Punch")
 
@@ -2361,34 +2360,39 @@ else:
             except Exception:
                 att_check = []
 
-            # Iframe location fetcher with status
+            # ऑटोमॅटिक लोकेशन कॅप्चर आणि URL सिंक
             st.components.v1.html("""
-            <div id="gps-status" style="font-family:sans-serif; font-size:12px; color:#64748B;">Detecting GPS location...</div>
+            <div id="gps-status" style="font-family:sans-serif; font-size:13px; color:#10B981; font-weight:600;">Connecting GPS...</div>
             <script>
             function updateLocation() {
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(function(position) {
-                        const lat = position.coords.latitude;
-                        const lon = position.coords.longitude;
-                        document.getElementById("gps-status").innerText = "GPS Connected (Lat: " + lat.toFixed(4) + ", Lon: " + lon.toFixed(4) + ")";
-                        const url = new URL(window.parent.location.href);
-                        if (url.searchParams.get("device_lat") !== lat.toString() || url.searchParams.get("device_lon") !== lon.toString()) {
-                            url.searchParams.set("device_lat", lat);
-                            url.searchParams.set("device_lon", lon);
-                            window.parent.history.replaceState({}, '', url.toString());
+                        const lat = position.coords.latitude.toFixed(6);
+                        const lon = position.coords.longitude.toFixed(6);
+                        document.getElementById("gps-status").innerHTML = "Location Active: Lat " + lat + ", Lon " + lon;
+                        
+                        const currentUrl = new URL(window.parent.location.href);
+                        if (currentUrl.searchParams.get("device_lat") !== lat || currentUrl.searchParams.get("device_lon") !== lon) {
+                            currentUrl.searchParams.set("device_lat", lat);
+                            currentUrl.searchParams.set("device_lon", lon);
+                            window.parent.location.href = currentUrl.toString();
                         }
                     }, function(error) {
-                        document.getElementById("gps-status").innerHTML = "<span style='color:red;'>GPS Permission Denied. Please click the lock icon in the address bar and Allow Location.</span>";
-                    }, {enableHighAccuracy: true, timeout: 10000, maximumAge: 0});
+                        document.getElementById("gps-status").innerHTML = "<span style='color:#EF4444;'>GPS Blocked. Please Allow Location Access from browser settings.</span>";
+                    }, {enableHighAccuracy: true, timeout: 8000, maximumAge: 0});
                 }
             }
             updateLocation();
-            setInterval(updateLocation, 5000);
             </script>
             """, height=35)
 
             raw_dev_lat = st.query_params.get("device_lat")
             raw_dev_lon = st.query_params.get("device_lon")
+
+            if raw_dev_lat and raw_dev_lon:
+                st.caption(f"Connected Device Location: `{raw_dev_lat}, {raw_dev_lon}`")
+            else:
+                st.caption("Waiting for GPS lock... (Location allow करा)")
 
             st.markdown('<div class="submit-red-btn" style="max-width: 320px;">', unsafe_allow_html=True)
             punch_pressed = st.button("Thumb Punch In / Out", key="strict_thumb_punch_btn")
@@ -2396,11 +2400,12 @@ else:
 
             if punch_pressed:
                 if not raw_dev_lat or not raw_dev_lon:
-                    st.error("GPS Location Required: Please allow browser location (GPS) permissions and retry.")
+                    st.error("GPS Location Not Synced: कृपया २ सेकंद थांबा, GPS लोकेशन स्क्रीनवर दिसेपर्यंत वाट पाहून मग Punch दाबा.")
                 else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
+                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2410,6 +2415,7 @@ else:
                     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
                     dist = R * c
 
+                    # Strict 15 Meters Geofence Validation
                     is_valid_location = dist <= 15.0
 
                     if is_valid_location:
@@ -2428,7 +2434,7 @@ else:
                                     "ot_hours": 0.0,
                                     "is_valid_geo": True
                                 }, on_conflict="employee_id,date").execute()
-                                st.toast(f"✅ Punch IN Recorded at {display_time}!")
+                                st.toast(f"Punch IN Recorded at {display_time}!")
                                 st.success(f"Punch IN Recorded at {display_time}!")
                                 pytime.sleep(1)
                                 st.rerun()
@@ -2442,14 +2448,14 @@ else:
                                     "status": "IN_PROGRESS",
                                     "is_valid_geo": True
                                 }).eq("id", record["id"]).execute()
-                                st.toast(f"✅ Punch OUT Updated at {display_time}!")
+                                st.toast(f"Punch OUT Updated at {display_time}!")
                                 st.success(f"Punch OUT Updated at {display_time}!")
                                 pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error updating Punch OUT: {e}")
                     else:
-                        st.error(f"Invalid Location! You are outside authorized plant boundary (Distance: {dist:.1f} meters). Punch allowed only within 15 meters.")
+                        st.error(f"Invalid Location! तुम्ही प्लांटच्या बाहेर आहात (अंतर: {dist:.1f} मीटर). पंच फक्त 15 मीटरच्या आत ग्राह्य धरला जाईल.")
 
             if att_check:
                 today_rec = att_check[0]
@@ -2846,10 +2852,10 @@ else:
                 except Exception:
                     pass
 
-                ppe_d = 0.0
+                ppe_ded = 0.0
                 try:
                     ppe_res = supabase.table("ppe_records").select("cost").eq("employee_id", emp["id"]).eq("deduction_month", sel_m).eq("status", "APPROVED").execute().data or []
-                    ppe_d = sum([float(p.get("cost") or 0.0) for p in ppe_res])
+                    ppe_ded = sum([float(p.get("cost") or 0.0) for p in ppe_res])
                 except Exception:
                     pass
 
@@ -2950,6 +2956,8 @@ else:
                             }).execute()
                             st.toast("✅ PPE request submitted successfully!")
                             st.success("PPE request submitted to supervisor successfully!")
+                            pytime.sleep(1)
+                            st.rerun()
                         except Exception as e:
                             st.error(f"Error submitting PPE request: {e}")
 
@@ -2970,6 +2978,8 @@ else:
                         }).execute()
                         st.toast("✅ Advance Salary request submitted!")
                         st.success("Advance Salary request submitted to Supervisor!")
+                        pytime.sleep(1)
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Error submitting request: {e}")
 
