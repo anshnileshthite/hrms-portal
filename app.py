@@ -598,7 +598,6 @@ if not st.session_state.user:
                     res = supabase.table("employees").select("*").eq("user_id", u_id).eq("password", u_pwd).eq("role", target_role).execute()
                     if res.data:
                         emp_rec = res.data[0]
-                        # Device Binding Check for Employees
                         if target_role == "employee":
                             dev_id = st.query_params.get("device_id") or "default_browser_device"
                             reg_dev = emp_rec.get("device_binding_id")
@@ -724,7 +723,7 @@ else:
             if ent_res:
                 for ent in ent_res:
                     st.markdown(f"#### 🏢 Entity: **{ent['name']}**")
-                    ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status"] == "APPROVED"]
+                    ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status") == "APPROVED"]
                     matched_clients = [c for c in cli_res if c.get("entity_id") == ent["id"]]
                     if matched_clients:
                         cols = st.columns(max(len(matched_clients), 1))
@@ -1730,145 +1729,6 @@ else:
                     st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
             else:
                 st.info("No salary advance records found.")
-
-        elif selected_panel == "⏰ Attendance & OT Live Edit":
-            st.subheader("Manual Attendance, Shift Timings & OT Management")
-            at_tab_save, at_tab_del = st.tabs(["📝 Add / Update Attendance Record", "🗑️ Delete Attendance Record"])
-            emp_list = fetch_cached_employees()
-            emp_map = {f"[{e.get('employee_code')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
-
-            with at_tab_save:
-                with st.form("attendance_save_form"):
-                    at1, at2, at3 = st.columns(3)
-                    sel_e = at1.selectbox("Select Employee", options=list(emp_map.keys()) if emp_map else ["No Employees"])
-                    sel_d = at2.date_input("Date", value=date.today())
-                    sel_st = at3.selectbox("Status", ["P (Present)", "A (Absent)", "WO (Week Off)", "PH (Paid Holiday)"])
-                    ot_h = at1.number_input("Overtime Hours (OT)", min_value=0.0, max_value=16.0, step=0.5, value=0.0)
-
-                    if st.form_submit_button("Save / Update Attendance", type="primary"):
-                        if emp_map:
-                            st_code = sel_st[:sel_st.find(" ")]
-                            supabase.table("attendance").upsert({
-                                "employee_id": emp_map[sel_e], "date": str(sel_d),
-                                "status": st_code, "ot_hours": ot_h, "is_valid_geo": True
-                            }, on_conflict="employee_id,date").execute()
-                            st.success(f"✅ Data Updated Successfully: Attendance logged for {sel_e}!")
-
-            with at_tab_del:
-                with st.form("attendance_del_form"):
-                    d_sel_e = st.selectbox("Select Employee to Remove Attendance", options=list(emp_map.keys()) if emp_map else ["No Employees"])
-                    d_sel_d = st.date_input("Date to Delete", value=date.today())
-                    if st.form_submit_button("🗑️ Delete Attendance Record"):
-                        if emp_map:
-                            supabase.table("attendance").delete().eq("employee_id", emp_map[d_sel_e]).eq("date", str(d_sel_d)).execute()
-                            st.warning(f"🗑️ Data Deleted Successfully: Attendance deleted for {d_sel_d}!")
-
-        elif selected_panel == "✅ Candidate Approvals":
-            st.subheader("New Candidate Approvals & Login Dispatch (Admin Desk)")
-            cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
-            if cands:
-                ents = fetch_cached_entities()
-                pref_dict = {f"{e['name']} ({e['code_prefix']})": e for e in ents}
-                
-                for cand in cands:
-                    with st.expander(f"📋 Applicant: {cand['full_name']} (Phone: {cand['phone_number']}) | DOB: {cand.get('dob')} | Gender: {cand.get('gender')}"):
-                        app1, app2 = st.columns(2)
-                        sel_pref_label = app1.selectbox("Select Entity Provider", options=list(pref_dict.keys()) if pref_dict else ["Default"], key=f"pref_{cand['id']}")
-                        selected_ent = pref_dict.get(sel_pref_label, {})
-                        prefix = selected_ent.get("code_prefix", "SE")
-                        
-                        generated_code = f"{prefix}{str(cand.get('id', '001'))[:4].upper()}"
-                        set_user_id = app1.text_input("User ID (Default Employee Code)", value=generated_code, key=f"uid_{cand['id']}")
-                        set_pwd = app2.text_input("Set Initial Password", value="emp" + cand['phone_number'][-4:], key=f"pwd_{cand['id']}")
-                        
-                        app_c1, app_c2 = st.columns(2)
-                        conf_desig = app_c1.text_input("Confirm Designation *", value=cand.get("designation") or "Associate", key=f"c_desig_{cand['id']}")
-                        conf_cat = app_c2.selectbox("Confirm Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key=f"c_cat_{cand['id']}")
-                        
-                        sel_shift = app2.selectbox("Confirm Shift Timing *", STANDARD_SHIFTS, key=f"shift_{cand['id']}")
-                        sel_wo = app1.selectbox("Confirm Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key=f"wo_{cand['id']}")
-
-                        col_act1, col_act2 = st.columns(2)
-                        if col_act1.button("✅ Approve & Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
-                            supabase.table("employees").update({
-                                "employee_code": set_user_id, 
-                                "user_id": set_user_id, 
-                                "password": set_pwd,
-                                "designation": conf_desig,
-                                "category": conf_cat,
-                                "status": "APPROVED",
-                                "weekly_off_day": sel_wo,
-                                "shift_hours": 8.5,
-                                "entity_id": selected_ent.get("id", cand.get("entity_id"))
-                            }).eq("id", cand["id"]).execute()
-                            
-                            st.cache_data.clear()
-                            
-                            msg = f"Hello {cand['full_name']}, Welcome! Your ESS Portal login credentials are: User ID: {set_user_id}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
-                            encoded_msg = urllib.parse.quote(msg)
-                            wa_url = f"https://wa.me/91{cand['phone_number']}?text={encoded_msg}"
-                            
-                            st.success(f"✅ Data Saved Successfully: Candidate approved! User ID: {set_user_id}")
-                            st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Send Login via WhatsApp to {cand["phone_number"]}</a>', unsafe_allow_html=True)
-
-                        if col_act2.button("🗑️ Reject & Delete Application", key=f"rej_{cand['id']}"):
-                            supabase.table("employees").delete().eq("id", cand["id"]).execute()
-                            st.cache_data.clear()
-                            st.warning("🗑️ Data Deleted Successfully: Application rejected!")
-                            st.rerun()
-            else:
-                st.info("No candidates pending admin approval.")
-
-        elif selected_panel == "🔑 User Roles & Access":
-            st.subheader("User Roles & Access Control")
-            t_u_add, t_u_edit = st.tabs(["➕ Create User Access", "✏️ Edit / Delete User Access"])
-            cli_re = fetch_cached_clients()
-            ent_re = fetch_cached_entities()
-            cli_m = {c["name"]: c["id"] for c in cli_re}
-            ent_m = {e["name"]: e["id"] for e in ent_re}
-
-            with t_u_add:
-                with st.form("create_role_form"):
-                    rc1, rc2, rc3 = st.columns(3)
-                    new_r = rc1.selectbox("Role", ["supervisor", "client", "admin"])
-                    new_u = rc2.text_input("User ID")
-                    new_n = rc3.text_input("Full Name")
-                    new_p = rc1.text_input("Password", type="password")
-                    new_ph = rc2.text_input("Mobile Number")
-                    assigned_ent = rc3.selectbox("Assign Entity Provider *", options=list(ent_m.keys()) if ent_m else ["No Entity"])
-                    assigned_client = rc1.selectbox("Assign Client Site", options=list(cli_m.keys()) if cli_m else ["No Client"])
-
-                    if st.form_submit_button("Save User Credentials", type="primary"):
-                        supabase.table("employees").insert({
-                            "user_id": new_u, "password": new_p, "full_name": new_n,
-                            "phone_number": new_ph if new_ph else "0000000000",
-                            "role": new_r, "entity_id": ent_m.get(assigned_ent),
-                            "client_id": cli_m.get(assigned_client), "status": "APPROVED"
-                        }).execute()
-                        st.cache_data.clear()
-                        st.success("✅ Data Saved Successfully: New user login created!")
-                        st.rerun()
-
-            with t_u_edit:
-                users_res = supabase.table("employees").select("*").in_("role", ["supervisor", "client"]).execute().data or []
-                if users_res:
-                    u_map = {f"{u.get('user_id')} - {u.get('full_name')} ({u.get('role')})": u for u in users_res}
-                    sel_u = st.selectbox("Select User to Modify/Delete", list(u_map.keys()))
-                    curr_u = u_map[sel_u]
-                    with st.form("edit_user_form"):
-                        up_un = st.text_input("Full Name", value=curr_u.get("full_name", ""))
-                        up_up = st.text_input("New Password", value=curr_u.get("password", ""))
-                        uc1, uc2 = st.columns(2)
-                        if uc1.form_submit_button("Update User", type="primary"):
-                            supabase.table("employees").update({"full_name": up_un, "password": up_up}).eq("id", curr_u["id"]).execute()
-                            st.cache_data.clear()
-                            st.success("✅ Data Updated Successfully: User updated!")
-                            st.rerun()
-                        if uc2.form_submit_button("🗑️ Delete User"):
-                            supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
-                            st.cache_data.clear()
-                            st.warning("🗑️ Data Deleted Successfully: User access revoked!")
-                            st.rerun()
 
     # -------------------------------------------------------------------------
     # 4.2 SUPERVISOR PORTAL
