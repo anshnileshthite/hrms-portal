@@ -138,6 +138,10 @@ def num_to_words(number):
 # -------------------------------------------------------------
 def get_exact_salary_rule(entity_id, client_id, designation, category):
     try:
+        if not entity_id:
+            all_s = supabase.table("salary_structures").select("*").limit(1).execute().data
+            return all_s[0] if all_s else None
+
         sr_query = supabase.table("salary_structures").select("*").eq("entity_id", entity_id)
         if client_id:
             sr_query = sr_query.eq("client_id", client_id)
@@ -501,8 +505,8 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
         doj_val = doj_val.split("T")[0]
 
     emp_info_data = [
-        ["Emp. Code:", str(emp_data.get("employee_code", "N/A")), "Paid Days:", str(att_summary.get("paid_days", 26))],
-        ["Name:", str(emp_data.get("full_name", "N/A")), "Total Days:", str(att_summary.get("total_days", 26))],
+        ["Emp. Code:", str(emp_data.get("employee_code", "N/A")), "Paid Days:", str(att_summary.get("paid_days", 0))],
+        ["Name:", str(emp_data.get("full_name", "N/A")), "Total Days:", str(att_summary.get("total_days", 0))],
         ["Designation:", str(emp_data.get("designation", "Staff")), "Bank Name:", str(emp_data.get("bank_name", "N/A"))],
         ["Client Site:", str(client_name), "Bank A/c No.:", str(emp_data.get("bank_account_no", "N/A"))],
         ["DOJ:", doj_val, "PAN No.:", str(emp_data.get("pan_number", "N/A"))],
@@ -580,7 +584,7 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
 
     t_words = Table([
         [Paragraph(f"<b>Amount in Words:</b> <b>{num_to_words(net_salary)}</b>", styles["Normal"])],
-        [Paragraph("<b>Remarks:</b> Salary calculated based on monthly attendance muster.", styles["Normal"])],
+        [Paragraph("<b>Remarks:</b> Salary calculated based on actual logged attendance.", styles["Normal"])],
         [Paragraph("<font size=7 color='#64748B'><i>This is a computer-generated salary slip and does not require any signature.</i></font>", ParagraphStyle(name="NoteP", alignment=1))]
     ], colWidths=[562])
     t_words.setStyle(TableStyle([
@@ -702,7 +706,7 @@ if not st.session_state.user:
                         "pan_number": c_pan,
                         "aadhar_number": c_aadhar,
                         "role": "employee", 
-                        "status": "PENDING_SUPERVISOR"  # थेट सुपरवायझरकडे पाठवण्यासाठी
+                        "status": "PENDING_SUPERVISOR"
                     }
                     try:
                         supabase.table("employees").insert(new_candidate).execute()
@@ -771,13 +775,15 @@ else:
             else:
                 st.info("No entities configured yet.")
 
-        # 2. Employee Master & Docs
+        # 2. Employee Master & Docs (Full Assignment Control)
         elif selected_panel == "Employee Master & Docs":
             st.subheader("Employee Master Management & Document Vault")
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
             e_map = {e["name"]: e["id"] for e in ent_list}
             c_map = {c["name"]: c["id"] for c in cli_list}
+            e_rev_map = {e["id"]: e["name"] for e in ent_list}
+            c_rev_map = {c["id"]: c["name"] for c in cli_list}
 
             tab_add_emp, tab_edit_emp, tab_vault = st.tabs(["Add New Employee", "Edit / Delete Employee", "Document Vault"])
 
@@ -799,8 +805,9 @@ else:
                     me_cat = m1.selectbox("Category", ["Skilled", "Semi-Skilled", "Unskilled"], index=1)
                     me_shift_timing = m2.selectbox("Assigned Shift Schedule *", STANDARD_SHIFTS)
                     me_wo_day = m3.selectbox("Weekly Off (WO) Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0)
-                    me_pwd = m1.text_input("Portal Password", type="password")
-                    me_aadhar = m2.text_input("Aadhaar Number *")
+                    me_ot_rate = m1.number_input("Custom OT Rate / Hour (Leave 0 to use Salary Structure)", min_value=0.0, step=10.0, value=0.0)
+                    me_pwd = m2.text_input("Portal Password", type="password")
+                    me_aadhar = m3.text_input("Aadhaar Number *")
 
                     st.write("##### 2. Organization Assignment & Statutory Numbers")
                     m4, m5 = st.columns(2)
@@ -828,7 +835,9 @@ else:
                                     "employee_code": me_code, "user_id": me_code, "password": me_pwd if me_pwd else "emp1234",
                                     "full_name": me_name, "father_name": me_father, "gender": me_gender, "dob": str(me_dob),
                                     "phone_number": me_phone, "emergency_contact": me_emg, "marital_status": me_marital, 
-                                    "designation": me_desig, "category": me_cat, "shift_hours": 8.5, "weekly_off_day": me_wo_day, 
+                                    "designation": me_desig, "category": me_cat, "shift_hours": 8.5, 
+                                    "shift_timing": me_shift_timing, "ot_rate_per_hour": me_ot_rate if me_ot_rate > 0 else None,
+                                    "weekly_off_day": me_wo_day, 
                                     "entity_id": e_map.get(sel_ent), "client_id": c_map.get(sel_cli),
                                     "uan_number": me_uan, "esic_number": me_esic, "pan_number": me_pan, "aadhar_number": me_aadhar,
                                     "bank_name": me_bank, "bank_branch": me_branch, "bank_account_no": me_acc,
@@ -855,7 +864,32 @@ else:
                         up_uid = c_u2.text_input("User ID (Login)", value=curr_selected.get("user_id", ""))
                         up_pwd = c_u3.text_input("Portal Password", value=curr_selected.get("password", ""))
 
-                        st.write("##### 2. Personal Information")
+                        st.write("##### 2. Organization, Client Site & Shift Assignment")
+                        asg1, asg2 = st.columns(2)
+                        
+                        curr_ent_name = e_rev_map.get(curr_selected.get("entity_id"))
+                        ent_options = list(e_map.keys())
+                        ent_idx = ent_options.index(curr_ent_name) if curr_ent_name in ent_options else 0
+                        up_ent = asg1.selectbox("Assigned Entity / Firm *", options=ent_options if ent_options else ["No Entity"], index=ent_idx)
+
+                        curr_cli_name = c_rev_map.get(curr_selected.get("client_id"))
+                        cli_options = list(c_map.keys())
+                        cli_idx = cli_options.index(curr_cli_name) if curr_cli_name in cli_options else 0
+                        up_cli = asg2.selectbox("Assigned Client Site *", options=cli_options if cli_options else ["No Client"], index=cli_idx)
+
+                        asg3, asg4, asg5 = st.columns(3)
+                        curr_shift = curr_selected.get("shift_timing") or STANDARD_SHIFTS[0]
+                        shift_idx = STANDARD_SHIFTS.index(curr_shift) if curr_shift in STANDARD_SHIFTS else 0
+                        up_shift = asg3.selectbox("Assigned Shift *", STANDARD_SHIFTS, index=shift_idx)
+                        
+                        wo_options = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+                        curr_wo = curr_selected.get("weekly_off_day") or "Sunday"
+                        wo_idx = wo_options.index(curr_wo) if curr_wo in wo_options else 0
+                        up_wo = asg4.selectbox("Weekly Off Day", wo_options, index=wo_idx)
+
+                        up_ot_rate = asg5.number_input("Custom OT Rate / Hour (Rs.)", min_value=0.0, step=10.0, value=float(curr_selected.get("ot_rate_per_hour") or 0.0))
+
+                        st.write("##### 3. Personal Information")
                         ed1, ed2, ed3 = st.columns(3)
                         up_name = ed1.text_input("Full Name *", value=curr_selected.get("full_name", ""))
                         up_father = ed2.text_input("Father's Name", value=curr_selected.get("father_name", ""))
@@ -868,13 +902,12 @@ else:
                         up_phone = ed5.text_input("Mobile Number *", value=curr_selected.get("phone_number", ""))
                         up_emg = ed6.text_input("Emergency Contact", value=curr_selected.get("emergency_contact", ""))
 
-                        st.write("##### 3. Employment & Designation")
-                        ed7, ed8, ed9 = st.columns(3)
+                        st.write("##### 4. Employment & Designation")
+                        ed7, ed8 = st.columns(2)
                         up_desig = ed7.text_input("Designation", value=curr_selected.get("designation", ""))
                         up_cat = ed8.selectbox("Category", ["Skilled", "Semi-Skilled", "Unskilled"], index=["Skilled", "Semi-Skilled", "Unskilled"].index(curr_selected.get("category", "Semi-Skilled")) if curr_selected.get("category") in ["Skilled", "Semi-Skilled", "Unskilled"] else 1)
-                        up_wo = ed9.selectbox("Weekly Off Day", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].index(curr_selected.get("weekly_off_day", "Sunday")) if curr_selected.get("weekly_off_day") in ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] else 0)
 
-                        st.write("##### 4. Statutory & Bank Details")
+                        st.write("##### 5. Statutory & Bank Details")
                         st1, st2, st3, st4 = st.columns(4)
                         up_uan = st1.text_input("UAN Number", value=curr_selected.get("uan_number", ""))
                         up_esic = st2.text_input("ESIC Number", value=curr_selected.get("esic_number", ""))
@@ -892,9 +925,12 @@ else:
                         if c_btn1.form_submit_button("Update Employee Data", type="primary"):
                             supabase.table("employees").update({
                                 "employee_code": up_code, "user_id": up_uid, "password": up_pwd,
+                                "entity_id": e_map.get(up_ent), "client_id": c_map.get(up_cli),
+                                "shift_timing": up_shift, "weekly_off_day": up_wo,
+                                "ot_rate_per_hour": up_ot_rate if up_ot_rate > 0 else None,
                                 "full_name": up_name, "father_name": up_father, "gender": up_gender,
                                 "dob": str(up_dob), "phone_number": up_phone, "emergency_contact": up_emg,
-                                "designation": up_desig, "category": up_cat, "weekly_off_day": up_wo,
+                                "designation": up_desig, "category": up_cat,
                                 "uan_number": up_uan, "esic_number": up_esic, "pan_number": up_pan,
                                 "aadhar_number": up_aadhar, "bank_name": up_bank, "bank_branch": up_branch,
                                 "bank_account_no": up_acc, "ifsc_code": up_ifsc
@@ -951,7 +987,7 @@ else:
                         f_bnk = st.file_uploader("Upload Bank Passbook / Cheque", type=["pdf", "jpg", "png"], key=f"vault_bnk_{curr_emp['id']}")
                         if f_bnk: st.success("Bank Details updated!")
 
-        # 3. Candidate Approvals (Supervisor Verified -> Admin Final Approval)
+        # 3. Candidate Approvals
         elif selected_panel == "Candidate Approvals":
             st.subheader("New Candidate Approvals & Login Dispatch (Admin Desk)")
             cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
@@ -988,6 +1024,7 @@ else:
                                 "status": "APPROVED",
                                 "weekly_off_day": sel_wo,
                                 "shift_hours": 8.5,
+                                "shift_timing": sel_shift,
                                 "entity_id": selected_ent.get("id", cand.get("entity_id"))
                             }).eq("id", cand["id"]).execute()
                             
@@ -1151,7 +1188,7 @@ else:
                             supabase.table("attendance").delete().eq("employee_id", emp_map[d_sel_e]).eq("date", str(d_sel_d)).execute()
                             st.warning(f"Attendance deleted for {d_sel_d}!")
 
-        # 6. Monthly Payroll Processing
+        # 6. Monthly Payroll Processing (Actual Logged Data Only - No Dummy Data)
         elif selected_panel == "Monthly Payroll Processing":
             st.subheader("Monthly Payroll Engine & Wage Sheet (Full Statutory Format)")
 
@@ -1190,19 +1227,27 @@ else:
                     h_pay = float(sal_struct.get("hra", 826.0)) if sal_struct else 826.0
                     o_pay = float(sal_struct.get("other_allowance", 813.0)) if sal_struct else 813.0
                     rate_total_wages = b_pay + d_pay + h_pay + o_pay
-                    ot_rate = float(sal_struct.get("ot_rate_per_hour", 120.0)) if sal_struct else 120.0
+                    
+                    # Custom employee OT rate if set, otherwise from salary structure
+                    emp_custom_ot = emp_item.get("ot_rate_per_hour")
+                    if emp_custom_ot and float(emp_custom_ot) > 0:
+                        ot_rate = float(emp_custom_ot)
+                    else:
+                        ot_rate = float(sal_struct.get("ot_rate_per_hour", 120.0)) if sal_struct else 120.0
 
-                    p_cnt = 24.0
-                    ph_cnt = 2.0
+                    # NO DUMMY DATA: Read only actual records from attendance table
+                    p_cnt = 0.0
+                    ph_cnt = 0.0
                     ot_hours_total = 0.0
                     try:
                         att_recs = supabase.table("attendance").select("status, ot_hours").eq("employee_id", emp_item["id"]).execute().data or []
                         if att_recs:
-                            p_cnt = float(len([a for a in att_recs if a.get("status") == "P"]))
+                            p_cnt = float(len([a for a in att_recs if a.get("status") in ["P", "WO"]]))
                             p_cnt += float(len([a for a in att_recs if a.get("status") == "HD"])) * 0.5
                             ph_cnt = float(len([a for a in att_recs if a.get("status") == "PH"]))
                             ot_hours_total = sum([float(a.get("ot_hours") or 0.0) for a in att_recs])
-                    except Exception: pass
+                    except Exception: 
+                        pass
 
                     total_days = p_cnt + ph_cnt
 
@@ -1966,6 +2011,7 @@ else:
                                     "client_id": c_dict.get(s_cli),
                                     "designation": s_desig,
                                     "shift_hours": 8.5,
+                                    "shift_timing": s_shift,
                                     "joining_date": str(s_join_date),
                                     "weekly_off_day": s_wo,
                                     "status": "PENDING_ADMIN"
@@ -2234,6 +2280,7 @@ else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
+                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2243,6 +2290,7 @@ else:
                     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
                     dist = R * c
 
+                    # Strict 15 Meters Geofence Validation
                     is_valid_location = dist <= 15.0
 
                     if is_valid_location:
@@ -2632,9 +2680,14 @@ else:
                 d_pay = float(sal_rule.get("da", 2511.0)) if sal_rule else 2511.0
                 h_pay = float(sal_rule.get("hra", 826.0)) if sal_rule else 826.0
                 o_pay = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
-                ot_rate = float(sal_rule.get("ot_rate_per_hour", 120.0)) if sal_rule else 120.0
+                
+                emp_custom_ot = emp.get("ot_rate_per_hour")
+                if emp_custom_ot and float(emp_custom_ot) > 0:
+                    ot_rate = float(emp_custom_ot)
+                else:
+                    ot_rate = float(sal_rule.get("ot_rate_per_hour", 120.0)) if sal_rule else 120.0
 
-                p_days = 26.0
+                p_days = 0.0
                 ot_hrs = 0.0
                 try:
                     att_recs = supabase.table("attendance").select("status, ot_hours").eq("employee_id", emp["id"]).execute().data or []
@@ -2674,7 +2727,7 @@ else:
                     'ot_amount': e_ot, 'pf_ded': pf_d, 'esic_ded': esic_d, 'pt_ded': pt_d,
                     'adv_val': adv_d, 'ppe_ded': ppe_d
                 }
-                att_summary_payload = {'paid_days': p_days, 'total_days': 26, 'ot_hours': ot_hrs}
+                att_summary_payload = {'paid_days': p_days, 'total_days': p_days, 'ot_hours': ot_hrs}
 
                 payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
 
@@ -2685,11 +2738,23 @@ else:
                     mime="application/pdf"
                 )
 
-        # 5. DOCUMENTS VAULT PANEL
+        # 5. DOCUMENTS VAULT PANEL (Fixed: Safe Fallback against null entity_id)
         elif selected_emp_panel == "Official Documents Vault":
             st.subheader("Official Employment Documents")
-            ent_obj = supabase.table("entities").select("*").eq("id", emp.get("entity_id")).execute().data
-            ent_val = ent_obj[0] if ent_obj else None
+            
+            ent_val = None
+            if emp.get("entity_id"):
+                try:
+                    ent_obj = supabase.table("entities").select("*").eq("id", emp.get("entity_id")).execute().data
+                    if ent_obj:
+                        ent_val = ent_obj[0]
+                except Exception:
+                    ent_val = None
+
+            if not ent_val:
+                all_e = fetch_cached_entities()
+                if all_e:
+                    ent_val = all_e[0]
 
             assigned_client_name = "Authorized Client Site"
             if emp.get("client_id"):
