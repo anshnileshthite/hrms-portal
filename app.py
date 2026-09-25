@@ -18,44 +18,44 @@ from reportlab.lib import colors
 # -------------------------------------------------------------
 st.set_page_config(page_title="ESS PORTAL", layout="wide")
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_cached_entities():
     try:
         return supabase.table("entities").select("*").execute().data or []
     except Exception:
         return []
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def fetch_cached_clients():
     try:
         return supabase.table("clients").select("*").execute().data or []
     except Exception:
         return []
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=30)
 def fetch_cached_employees():
     try:
         return supabase.table("employees").select("*").execute().data or []
     except Exception:
         return []
 
-# Custom CSS Styling with Colorful Touch, Icons & Clean Padding
+# Custom CSS Styling (Clean & Direct)
 st.markdown("""
     <style>
-    .main-title { font-size: 26px; font-weight: 750; color: #0F172A; margin-bottom: 12px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
-    .stTabs [data-baseweb="tab"] { font-size: 14px; color: #475569; padding: 8px 12px; font-weight: 600; }
-    .stTabs [aria-selected="true"] { color: #DC2626 !important; border-bottom-color: #DC2626 !important; font-weight: bold; background-color: #FEF2F2; border-radius: 4px; }
-    .submit-red-btn button { background-color: #DC2626 !important; color: white !important; font-weight: 600; width: 100%; border: none; border-radius: 6px; padding: 10px; }
-    .sidebar-brand { font-size: 20px; font-weight: bold; color: #1E293B; display: flex; align-items: center; gap: 8px; }
-    .logged-badge { color: #10B981; font-weight: bold; font-size: 13px; margin-bottom: 15px; background-color: #ECFDF5; padding: 4px 8px; border-radius: 4px; border: 1px solid #A7F3D0; }
-    .stButton>button { width: 100%; border-radius: 6px; text-align: left; font-weight: 500; }
-    .profile-card { background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%); border: 1px solid #CBD5E1; border-radius: 8px; padding: 16px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .main-title { font-size: 24px; font-weight: 700; color: #1E293B; margin-bottom: 12px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
+    .stTabs [data-baseweb="tab"] { font-size: 14px; color: #64748B; padding: 6px 0px; }
+    .stTabs [aria-selected="true"] { color: #EF4444 !important; border-bottom-color: #EF4444 !important; font-weight: bold; }
+    .submit-red-btn button { background-color: #EF4444 !important; color: white !important; font-weight: 600; width: 100%; border: none; border-radius: 4px; padding: 10px; }
+    .sidebar-brand { font-size: 19px; font-weight: bold; color: #0F172A; }
+    .logged-badge { color: #059669; font-weight: bold; font-size: 13px; margin-bottom: 15px; }
+    .stButton>button { width: 100%; border-radius: 4px; text-align: left; }
+    .profile-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 14px; margin-bottom: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# PERSISTENT SESSION & DEVICE BINDING HANDLING
+# PERSISTENT SESSION HANDLING
 # -------------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -76,7 +76,7 @@ if st.session_state.user is None:
                 pass
 
 if "active_admin_tab" not in st.session_state:
-    st.session_state.active_admin_tab = "📊 Dashboard Overview"
+    st.session_state.active_admin_tab = "Dashboard Overview"
 
 STANDARD_SHIFTS = [
     "General Shift (08:30 AM - 05:00 PM | 8.5 hrs)",
@@ -132,6 +132,33 @@ def num_to_words(number):
         return words
     except Exception:
         return f"Indian Rupees {number:,.2f} Only"
+
+# -------------------------------------------------------------
+# DYNAMIC EXACT SALARY STRUCTURE RESOLUTION
+# -------------------------------------------------------------
+def get_exact_salary_rule(entity_id, client_id, designation, category):
+    try:
+        sr_query = supabase.table("salary_structures").select("*").eq("entity_id", entity_id)
+        if client_id:
+            sr_query = sr_query.eq("client_id", client_id)
+        if designation:
+            sr_query = sr_query.ilike("designation", designation.strip())
+        if category:
+            sr_query = sr_query.eq("category", category.strip())
+        matched = sr_query.execute().data
+        if matched:
+            return matched[0]
+            
+        fb1 = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).execute().data
+        if fb1:
+            return fb1[0]
+            
+        fb2 = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).execute().data
+        if fb2:
+            return fb2[0]
+    except Exception:
+        pass
+    return None
 
 # -------------------------------------------------------------
 # EXACT REPLICA: OFFICIAL OFFER LETTER PDF
@@ -233,7 +260,7 @@ The details of your salary bifurcation are as below -"""
         ["D", "Other Allowance", f"{other:,.2f}"],
         ["E", "Gross Salary", f"{gross:,.2f}"],
         ["", "Deduction", ""],
-        ["F", "PF @ 12% (A+B) (Max ₹1,800)", f"{ee_pf:,.2f}"],
+        ["F", "PF @ 12% (A+B) (Max Rs 1,800)", f"{ee_pf:,.2f}"],
         ["G", "Professional Tax (PT)", f"{pt:,.2f}"],
         ["H", "ESI @ 0.75% ON TOTAL 'E'", f"{ee_esic:,.2f}"],
         ["I", "Total Deductions", f"{total_ded:,.2f}"],
@@ -363,7 +390,7 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
         ["", "Total (Without GST)", "", "", "", "", "", f"{sub_total:,.2f}"],
         ["", "CGST", "", "9%", "", "", "", f"{cgst:,.2f}"],
         ["", "SGST", "", "9%", "", "", "", f"{sgst:,.2f}"],
-        ["", "Total", "", "", "", "", "", f"₹ {grand_total:,.2f}"]
+        ["", "Total", "", "", "", "", "", f"Rs. {grand_total:,.2f}"]
     ]
     t_items = Table([[Paragraph(c, styles["Normal"]) if "<br/>" in str(c) else c for c in row] for row in items_data], colWidths=[35, 195, 55, 45, 40, 65, 35, 92])
     t_items.setStyle(TableStyle([
@@ -391,8 +418,8 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
 
     tax_data = [
         ["HSN/SAC", "Taxable Value", "Central Tax Rate", "Central Tax Amt", "State Tax Rate", "State Tax Amt", "Total Tax Amount"],
-        ["996511", f"₹{sub_total:,.2f}", "9%", f"₹{cgst:,.2f}", "9%", f"₹{sgst:,.2f}", f"₹{(cgst+sgst):,.2f}"],
-        ["Total", f"₹{sub_total:,.2f}", "", f"₹{cgst:,.2f}", "", f"₹{sgst:,.2f}", f"₹{(cgst+sgst):,.2f}"]
+        ["996511", f"Rs.{sub_total:,.2f}", "9%", f"Rs.{cgst:,.2f}", "9%", f"Rs.{sgst:,.2f}", f"Rs.{(cgst+sgst):,.2f}"],
+        ["Total", f"Rs.{sub_total:,.2f}", "", f"Rs.{cgst:,.2f}", "", f"Rs.{sgst:,.2f}", f"Rs.{(cgst+sgst):,.2f}"]
     ]
     t_tax = Table(tax_data, colWidths=[70, 85, 75, 80, 75, 80, 97])
     t_tax.setStyle(TableStyle([
@@ -450,7 +477,7 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     return buffer.getvalue()
 
 # -------------------------------------------------------------
-# EXACT REPLICA: SALARY PAYSLIP PDF GENERATION (PROFESSIONAL CENTERED)
+# EXACT REPLICA: SALARY PAYSLIP PDF GENERATION
 # -------------------------------------------------------------
 def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
     buffer = io.BytesIO()
@@ -569,22 +596,22 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     return buffer.getvalue()
 
 # =============================================================================
-# 3. PUBLIC INTERFACE
+# 3. PUBLIC INTERFACE (LOGIN & ONBOARDING)
 # =============================================================================
 if not st.session_state.user:
-    st.markdown('<div class="main-title">🔐 ESS PORTAL - Login</div>', unsafe_allow_html=True)
-    tab_signin, tab_join = st.tabs(["🔑 Sign In", "📝 Candidate Paperless Joining Form"])
+    st.markdown('<div class="main-title">ESS PORTAL</div>', unsafe_allow_html=True)
+    tab_signin, tab_join = st.tabs(["Sign In", "Candidate Paperless Joining Form"])
 
     with tab_signin:
         col_s1, col_login, col_s2 = st.columns([1, 1.8, 1])
         with col_login:
             st.write(" ")
-            role_choice = st.selectbox("👤 Login Portal", ["Employee (ESS)", "Admin Portal", "Supervisor Portal", "Client Desk"])
-            u_id = st.text_input("🆔 User ID / Employee Code")
-            u_pwd = st.text_input("🔑 Password", type="password")
+            role_choice = st.selectbox("Login Portal", ["Employee (ESS)", "Admin Portal", "Supervisor Portal", "Client Desk"])
+            u_id = st.text_input("User ID / Employee Code")
+            u_pwd = st.text_input("Password", type="password")
             
             st.markdown('<div class="submit-red-btn">', unsafe_allow_html=True)
-            if st.button("🚀 Access Dashboard", key="access_btn"):
+            if st.button("Access Dashboard", key="access_btn"):
                 role_map = {"Employee (ESS)": "employee", "Admin Portal": "admin", "Supervisor Portal": "supervisor", "Client Desk": "client"}
                 target_role = role_map[role_choice]
                 
@@ -599,10 +626,10 @@ if not st.session_state.user:
                     if res.data:
                         emp_rec = res.data[0]
                         if target_role == "employee":
-                            dev_id = st.query_params.get("device_id") or "default_browser_device"
+                            dev_id = st.query_params.get("device_id") or "browser_device_default"
                             reg_dev = emp_rec.get("device_binding_id")
                             if reg_dev and reg_dev != dev_id:
-                                st.error("⛔ Security Error: This account is locked to another mobile device. Contact Admin to reset.")
+                                st.error("Security Error: This account is locked to another mobile device. Contact Admin to reset.")
                                 st.stop()
                             elif not reg_dev:
                                 supabase.table("employees").update({"device_binding_id": dev_id}).eq("id", emp_rec["id"]).execute()
@@ -613,40 +640,40 @@ if not st.session_state.user:
                         st.query_params["session_role"] = str(target_role)
                         st.rerun()
                     else:
-                        st.error("❌ Invalid Credentials or Login Role!")
+                        st.error("Invalid Credentials or Login Role!")
                 except Exception as e:
                     st.error(f"Authentication Error: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
 
     with tab_join:
-        st.write("#### 📝 Candidate Paperless Onboarding Form")
+        st.write("#### Candidate Paperless Onboarding Form")
         with st.form("onboard_candidate_form", clear_on_submit=True):
             col_left, col_right = st.columns(2)
-            c_name = col_left.text_input("👤 Candidate Full Name *")
-            c_father = col_left.text_input("👨‍👦 Father's Name *")
-            c_gender = col_left.selectbox("⚧ Gender *", ["Male", "Female", "Other"])
-            c_dob = col_left.date_input("🎂 Date of Birth (DOB) *", min_value=date(1960, 1, 1), max_value=date(2010, 1, 1), value=date(1998, 1, 1))
-            c_marital = col_left.selectbox("💍 Marital Status", ["Single", "Married"])
-            c_phone = col_left.text_input("📱 Employee Mobile Number *")
-            c_emergency = col_left.text_input("📞 Emergency Contact Number *")
+            c_name = col_left.text_input("Candidate Full Name *")
+            c_father = col_left.text_input("Father's Name *")
+            c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
+            c_dob = col_left.date_input("Date of Birth (DOB) *", min_value=date(1960, 1, 1), max_value=date(2010, 1, 1), value=date(1998, 1, 1))
+            c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
+            c_phone = col_left.text_input("Employee Mobile Number *")
+            c_emergency = col_left.text_input("Emergency Contact Number *")
 
-            c_uan = col_right.text_input("🔢 UAN Number")
-            c_esic = col_right.text_input("🔢 ESIC Number")
-            c_bank = col_right.text_input("🏦 Bank Name")
-            c_branch = col_right.text_input("🏦 Bank Branch Name")
-            c_acc = col_right.text_input("💳 Bank Account Number")
-            c_ifsc = col_right.text_input("🔤 IFSC Code")
-            c_pan = col_right.text_input("🪪 PAN Number")
-            c_aadhar = col_right.text_input("🪪 Aadhaar Number *", type="password")
+            c_uan = col_right.text_input("UAN Number")
+            c_esic = col_right.text_input("ESIC Number")
+            c_bank = col_right.text_input("Bank Name")
+            c_branch = col_right.text_input("Bank Branch Name")
+            c_acc = col_right.text_input("Bank Account Number")
+            c_ifsc = col_right.text_input("IFSC Code")
+            c_pan = col_right.text_input("PAN Number")
+            c_aadhar = col_right.text_input("Aadhaar Number *", type="password")
 
             st.write("---")
-            st.write("#### 📁 Document Attachments (Mandatory - max 200MB)")
-            up_photo = col_left.file_uploader("📸 Passport Size Photo", type=["jpg", "png"])
-            up_aadhar = col_right.file_uploader("🪪 Aadhaar Card Copy", type=["pdf", "jpg", "png"])
-            up_pan = col_left.file_uploader("🪪 PAN Card Copy", type=["pdf", "jpg", "png"])
-            up_bank = col_right.file_uploader("🏦 Bank Passbook / Cheque", type=["pdf", "jpg", "png"])
+            st.write("#### Document Attachments (Mandatory - max 200MB)")
+            up_photo = col_left.file_uploader("Passport Size Photo", type=["jpg", "png"])
+            up_aadhar = col_right.file_uploader("Aadhaar Card Copy", type=["pdf", "jpg", "png"])
+            up_pan = col_left.file_uploader("PAN Card Copy", type=["pdf", "jpg", "png"])
+            up_bank = col_right.file_uploader("Bank Passbook / Cheque", type=["pdf", "jpg", "png"])
 
-            if st.form_submit_button("📤 Submit Onboarding Application"):
+            if st.form_submit_button("Submit Onboarding Application"):
                 if not c_name or not c_phone:
                     st.error("Mandatory fields (*) are required!")
                 else:
@@ -669,11 +696,11 @@ if not st.session_state.user:
                         "pan_number": c_pan,
                         "aadhar_number": c_aadhar,
                         "role": "employee", 
-                        "status": "PENDING_SUPERVISOR"
+                        "status": "APPROVED"
                     }
                     try:
                         supabase.table("employees").insert(new_candidate).execute()
-                        st.success("✅ Application submitted successfully! Forwarded to Supervisor.")
+                        st.success("Application submitted successfully!")
                     except Exception as err:
                         st.error(f"Error submitting data: {err}")
 
@@ -688,15 +715,15 @@ else:
     # -------------------------------------------------------------------------
     if active_role == "admin":
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">🛡️ HRMS Admin</div>', unsafe_allow_html=True)
-            st.markdown('<div class="logged-badge">🟢 Logged In: ADMIN</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS ADMIN</div>', unsafe_allow_html=True)
+            st.markdown('<div class="logged-badge">Logged In: ADMIN</div>', unsafe_allow_html=True)
             st.caption("ADMIN DESK")
 
             admin_tabs = [
-                "📊 Dashboard Overview", "👥 Employee Master & Docs", "✅ Candidate Approvals",
-                "💰 Salary Structure Rules", "⏰ Attendance & OT Live Edit", "📑 Monthly Payroll Processing",
-                "💸 Advance / Loan Desk", "🦺 PPE & Uniform Tracker", "🧾 Client Billing & Invoices",
-                "🏢 Company & Plant Locations", "🔑 User Roles & Access", "📱 Device Binding Reset"
+                "Dashboard Overview", "Employee Master & Docs", "Candidate Approvals",
+                "Salary Structure Rules", "Attendance & OT Live Edit", "Monthly Payroll Processing",
+                "Advance / Loan Desk", "PPE & Uniform Tracker", "Client Billing & Invoices",
+                "Company & Plant Locations", "User Roles & Access", "Device Binding Reset"
             ]
 
             for at in admin_tabs:
@@ -706,7 +733,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="adm_logout"):
+            if st.button("Logout", key="adm_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -714,7 +741,8 @@ else:
         selected_panel = st.session_state.active_admin_tab
         st.title(selected_panel)
 
-        if selected_panel == "📊 Dashboard Overview":
+        # 1. Dashboard Overview
+        if selected_panel == "Dashboard Overview":
             st.subheader("Workforce Deployment Matrix (Client-Wise per Entity)")
             ent_res = fetch_cached_entities()
             cli_res = fetch_cached_clients()
@@ -722,28 +750,29 @@ else:
 
             if ent_res:
                 for ent in ent_res:
-                    st.markdown(f"#### 🏢 Entity: **{ent['name']}**")
+                    st.markdown(f"#### Entity: **{ent['name']}**")
                     ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status") == "APPROVED"]
                     matched_clients = [c for c in cli_res if c.get("entity_id") == ent["id"]]
                     if matched_clients:
                         cols = st.columns(max(len(matched_clients), 1))
                         for idx, cl in enumerate(matched_clients):
                             c_count = len([e for e in ent_emps if e.get("client_id") == cl["id"]])
-                            cols[idx % len(cols)].metric(f"📍 {cl['name']}", f"{c_count} Staff")
+                            cols[idx % len(cols)].metric(f"{cl['name']}", f"{c_count} Staff")
                     else:
                         st.info("No clients mapped under this entity.")
                     st.write("---")
             else:
                 st.info("No entities configured yet.")
 
-        elif selected_panel == "👥 Employee Master & Docs":
+        # 2. Employee Master & Docs
+        elif selected_panel == "Employee Master & Docs":
             st.subheader("Employee Master Management & Document Vault")
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
             e_map = {e["name"]: e["id"] for e in ent_list}
             c_map = {c["name"]: c["id"] for c in cli_list}
 
-            tab_add_emp, tab_edit_emp, tab_vault = st.tabs(["➕ Add New Employee", "✏️ Edit / Delete Employee", "📁 Document Vault"])
+            tab_add_emp, tab_edit_emp, tab_vault = st.tabs(["Add New Employee", "Edit / Delete Employee", "Document Vault"])
 
             with tab_add_emp:
                 with st.form("manual_full_emp_with_docs_form"):
@@ -800,7 +829,7 @@ else:
                                     "joining_date": str(date.today())
                                 }).execute()
                                 st.cache_data.clear()
-                                st.success(f"✅ Data Saved Successfully: Employee {me_name} registered!")
+                                st.success(f"Employee {me_name} registered successfully!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error saving employee: {e}")
@@ -813,7 +842,7 @@ else:
                     curr_selected = emp_opt_map[sel_emp_to_edit]
 
                     with st.form("edit_emp_crud_form"):
-                        st.write("##### 1. Login Credentials & System Identifiers")
+                        st.write("##### 1. Login Credentials & Identifiers")
                         c_u1, c_u2, c_u3 = st.columns(3)
                         up_code = c_u1.text_input("Employee Code", value=curr_selected.get("employee_code", ""))
                         up_uid = c_u2.text_input("User ID (Login)", value=curr_selected.get("user_id", ""))
@@ -832,20 +861,19 @@ else:
                         up_phone = ed5.text_input("Mobile Number *", value=curr_selected.get("phone_number", ""))
                         up_emg = ed6.text_input("Emergency Contact", value=curr_selected.get("emergency_contact", ""))
 
-                        st.write("##### 3. Employment & Organization Assignment")
+                        st.write("##### 3. Employment & Designation")
                         ed7, ed8, ed9 = st.columns(3)
                         up_desig = ed7.text_input("Designation", value=curr_selected.get("designation", ""))
                         up_cat = ed8.selectbox("Category", ["Skilled", "Semi-Skilled", "Unskilled"], index=["Skilled", "Semi-Skilled", "Unskilled"].index(curr_selected.get("category", "Semi-Skilled")) if curr_selected.get("category") in ["Skilled", "Semi-Skilled", "Unskilled"] else 1)
                         up_wo = ed9.selectbox("Weekly Off Day", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].index(curr_selected.get("weekly_off_day", "Sunday")) if curr_selected.get("weekly_off_day") in ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] else 0)
 
-                        st.write("##### 4. Statutory & Identity Numbers")
+                        st.write("##### 4. Statutory & Bank Details")
                         st1, st2, st3, st4 = st.columns(4)
                         up_uan = st1.text_input("UAN Number", value=curr_selected.get("uan_number", ""))
                         up_esic = st2.text_input("ESIC Number", value=curr_selected.get("esic_number", ""))
                         up_pan = st3.text_input("PAN Number", value=curr_selected.get("pan_number", ""))
                         up_aadhar = st4.text_input("Aadhaar Number", value=str(curr_selected.get("aadhar_number") or ""))
 
-                        st.write("##### 5. Bank Account Details")
                         bk1, bk2, bk3, bk4 = st.columns(4)
                         up_bank = bk1.text_input("Bank Name", value=curr_selected.get("bank_name", ""))
                         up_branch = bk2.text_input("Branch Name", value=curr_selected.get("bank_branch", ""))
@@ -865,16 +893,16 @@ else:
                                 "bank_account_no": up_acc, "ifsc_code": up_ifsc
                             }).eq("id", curr_selected["id"]).execute()
                             st.cache_data.clear()
-                            st.success("✅ Data Updated Successfully: Employee record refreshed!")
+                            st.success("Employee record refreshed successfully!")
                             st.rerun()
 
-                        if c_btn2.form_submit_button("🗑️ Delete Employee"):
+                        if c_btn2.form_submit_button("Delete Employee"):
                             supabase.table("employees").delete().eq("id", curr_selected["id"]).execute()
                             st.cache_data.clear()
-                            st.warning("🗑️ Data Deleted Successfully: Employee record removed!")
+                            st.warning("Employee record removed successfully!")
                             st.rerun()
                 else:
-                    st.info("ℹ️ No employee records found in the system.")
+                    st.info("No employee records found.")
 
             with tab_vault:
                 emp_records = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
@@ -886,251 +914,96 @@ else:
                     curr_ent_obj = next((e for e in ent_list if e["id"] == curr_emp.get("entity_id")), None)
                     curr_cli_name = next((c["name"] for c in cli_list if c["id"] == curr_emp.get("client_id")), "Client Site")
 
-                    matched_rule = None
-                    try:
-                        sr_query = supabase.table("salary_structures").select("*").eq("entity_id", curr_emp.get("entity_id"))
-                        if curr_emp.get("client_id"):
-                            sr_query = sr_query.eq("client_id", curr_emp.get("client_id"))
-                        if curr_emp.get("designation"):
-                            sr_query = sr_query.ilike("designation", curr_emp.get("designation").strip())
-                        if curr_emp.get("category"):
-                            sr_query = sr_query.eq("category", curr_emp.get("category").strip())
-                        s_matched = sr_query.execute().data
-                        if s_matched:
-                            matched_rule = s_matched[0]
-                        else:
-                            fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", curr_emp.get("entity_id")).execute().data
-                            if fallback_res:
-                                matched_rule = fallback_res[0]
-                    except Exception:
-                        pass
+                    matched_rule = get_exact_salary_rule(
+                        curr_emp.get("entity_id"),
+                        curr_emp.get("client_id"),
+                        curr_emp.get("designation"),
+                        curr_emp.get("category")
+                    )
 
                     v_c1, v_c2 = st.columns(2)
                     with v_c1:
                         st.markdown("##### 1. Official Offer Letter")
                         offer_pdf_data = generate_official_offer_letter(curr_emp, curr_ent_obj, curr_cli_name, matched_rule)
-                        st.download_button("📥 Download Official Offer Letter (PDF)", data=offer_pdf_data, file_name=f"Offer_Letter_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_o_{curr_emp['id']}")
+                        st.download_button("Download Official Offer Letter (PDF)", data=offer_pdf_data, file_name=f"Offer_Letter_{curr_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dn_o_{curr_emp['id']}")
 
                         st.markdown("##### 3. Aadhaar Card Copy")
                         f_aadh = st.file_uploader("Upload Aadhaar", type=["pdf", "jpg", "png"], key=f"vault_aadh_{curr_emp['id']}")
-                        if f_aadh: st.success("✅ Data Updated Successfully: Aadhaar copy updated!")
+                        if f_aadh: st.success("Aadhaar copy updated!")
 
                     with v_c2:
                         st.markdown("##### 2. ESIC Certificate / Card")
                         f_esic = st.file_uploader("Upload ESIC Document", type=["pdf", "jpg", "png"], key=f"vault_esic_{curr_emp['id']}")
-                        if f_esic: st.success("✅ Data Updated Successfully: ESIC Document updated!")
+                        if f_esic: st.success("ESIC Document updated!")
 
                         st.markdown("##### 4. PAN Card Copy")
                         f_pan = st.file_uploader("Upload PAN Card", type=["pdf", "jpg", "png"], key=f"vault_pan_{curr_emp['id']}")
-                        if f_pan: st.success("✅ Data Updated Successfully: PAN Card updated!")
+                        if f_pan: st.success("PAN Card updated!")
 
                         st.markdown("##### 5. Bank Passbook / Cheque Copy")
                         f_bnk = st.file_uploader("Upload Bank Passbook / Cheque", type=["pdf", "jpg", "png"], key=f"vault_bnk_{curr_emp['id']}")
-                        if f_bnk: st.success("✅ Data Updated Successfully: Bank Details updated!")
-                else:
-                    st.info("ℹ️ No employee records available for document vault.")
+                        if f_bnk: st.success("Bank Details updated!")
 
-        elif selected_panel == "📱 Device Binding Reset":
-            st.subheader("📱 Employee Mobile Device Binding & Reset Management")
-            st.info("Here Admin can reset the registered device ID/IP for employees if they switch mobile phones.")
-            
-            all_bound_emps = supabase.table("employees").select("id, employee_code, full_name, phone_number, device_binding_id").eq("role", "employee").execute().data or []
-            if all_bound_emps:
-                emp_bind_map = {f"[{e.get('employee_code')}] {e['full_name']} (Phone: {e.get('phone_number')})": e for e in all_bound_emps}
-                sel_b_emp = st.selectbox("Select Employee to Reset Device Lock", list(emp_bind_map.keys()))
-                target_emp = emp_bind_map[sel_b_emp]
-                
-                st.write(f"**Current Bound Device ID:** `{target_emp.get('device_binding_id') or 'Not Bound / First Login Pending'}`")
-                
-                if st.button("🔄 Reset / Unlink Mobile Device Binding", type="primary"):
-                    try:
-                        supabase.table("employees").update({"device_binding_id": None}).eq("id", target_emp["id"]).execute()
-                        st.success(f"✅ Device binding successfully reset for {target_emp['full_name']}! Now they can login from a new phone.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error resetting device binding: {e}")
-            else:
-                st.info("ℹ️ No employee records found for device reset.")
-
-        elif selected_panel == "🏢 Company & Plant Locations":
-            loc1, loc2 = st.columns(2)
-            with loc1:
-                st.subheader("1. Entity / Firm Master")
-                t_ent_add, t_ent_edit = st.tabs(["➕ Add Entity", "✏️ Edit / Delete Entity"])
-                with t_ent_add:
-                    with st.form("add_entity_portal_form"):
-                        en_name = st.text_input("Firm / Entity Name")
-                        en_addr = st.text_area("Registered Office Address")
-                        en_gst = st.text_input("GST Number")
-                        en_pref = st.text_input("Code Prefix (e.g. SE, GM)")
-                        en_pan = st.text_input("PAN Number")
-                        en_ph = st.text_input("Phone Number")
-                        en_em = st.text_input("Email ID")
-                        st.markdown("##### Bank Details for Invoices")
-                        en_bnk = st.text_input("Bank Name", value="SARASWAT BANK")
-                        en_acc = st.text_input("Account Number", value="610000000045918")
-                        en_ifsc = st.text_input("IFSC Code", value="SRCB0000376")
-                        
-                        if st.form_submit_button("Save Entity", type="primary"):
-                            if en_name and en_pref:
-                                supabase.table("entities").insert({
-                                    "name": en_name, "address": en_addr, "gst_number": en_gst, "code_prefix": en_pref,
-                                    "pan_number": en_pan, "phone": en_ph, "email": en_em,
-                                    "bank_name": en_bnk, "bank_account_no": en_acc, "ifsc_code": en_ifsc
-                                }).execute()
-                                st.cache_data.clear()
-                                st.success("✅ Data Saved Successfully: Entity registered!")
-                                st.rerun()
-
-                with t_ent_edit:
-                    ents_all = fetch_cached_entities()
-                    if ents_all:
-                        ent_select_map = {e["name"]: e for e in ents_all}
-                        sel_ent_e = st.selectbox("Select Entity to Edit/Delete", list(ent_select_map.keys()))
-                        curr_e = ent_select_map[sel_ent_e]
-                        with st.form("edit_entity_portal_form"):
-                            en_up_name = st.text_input("Firm Name", value=curr_e.get("name", ""))
-                            en_up_addr = st.text_area("Address", value=curr_e.get("address", ""))
-                            en_up_gst = st.text_input("GST", value=curr_e.get("gst_number", ""))
-                            en_up_pan = st.text_input("PAN", value=curr_e.get("pan_number", ""))
-                            en_up_bnk = st.text_input("Bank Name", value=curr_e.get("bank_name", "SARASWAT BANK"))
-                            en_up_acc = st.text_input("Bank Account No", value=curr_e.get("bank_account_no", "610000000045918"))
-                            en_up_ifsc = st.text_input("Bank IFSC Code", value=curr_e.get("ifsc_code", "SRCB0000376"))
-                            
-                            c1, c2 = st.columns(2)
-                            if c1.form_submit_button("Update Entity", type="primary"):
-                                update_payload = {
-                                    "name": en_up_name, 
-                                    "address": en_up_addr, 
-                                    "gst_number": en_up_gst,
-                                    "bank_name": en_up_bnk,
-                                    "bank_account_no": en_up_acc,
-                                    "ifsc_code": en_up_ifsc
-                                }
-                                if en_up_pan:
-                                    update_payload["pan_number"] = en_up_pan
-
-                                try:
-                                    supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
-                                    st.cache_data.clear()
-                                    st.success("✅ Data Updated Successfully: Entity refreshed!")
-                                    st.rerun()
-                                except Exception as e:
-                                    if "pan_number" in str(e):
-                                        update_payload.pop("pan_number", None)
-                                        supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
-                                        st.cache_data.clear()
-                                        st.success("✅ Data Updated Successfully (Without PAN): Entity refreshed!")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Error updating entity: {e}")
-
-                            if c2.form_submit_button("🗑️ Delete Entity"):
-                                supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
-                                st.cache_data.clear()
-                                st.warning("🗑️ Data Deleted Successfully: Entity removed!")
-                                st.rerun()
-                    else:
-                        st.info("ℹ️ No entities available to edit.")
-
-            with loc2:
-                st.subheader("2. Client Plant Master & Geofence")
-                t_cli_add, t_cli_edit = st.tabs(["➕ Add Client", "✏️ Edit / Delete Client"])
+        # 3. Candidate Approvals
+        elif selected_panel == "Candidate Approvals":
+            st.subheader("New Candidate Approvals & Login Dispatch (Admin Desk)")
+            cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
+            if cands:
                 ents = fetch_cached_entities()
-                e_dict = {e["name"]: e["id"] for e in ents}
+                pref_dict = {f"{e['name']} ({e['code_prefix']})": e for e in ents}
+                
+                for cand in cands:
+                    with st.expander(f"Applicant: {cand['full_name']} (Mobile: {cand['phone_number']}) | DOB: {cand.get('dob')} | Gender: {cand.get('gender')}"):
+                        app1, app2 = st.columns(2)
+                        sel_pref_label = app1.selectbox("Select Entity Provider", options=list(pref_dict.keys()) if pref_dict else ["Default"], key=f"pref_{cand['id']}")
+                        selected_ent = pref_dict.get(sel_pref_label, {})
+                        prefix = selected_ent.get("code_prefix", "SE")
+                        
+                        generated_code = f"{prefix}{str(cand.get('id', '001'))[:4].upper()}"
+                        set_user_id = app1.text_input("User ID (Default Employee Code)", value=generated_code, key=f"uid_{cand['id']}")
+                        set_pwd = app2.text_input("Set Initial Password", value="emp" + cand['phone_number'][-4:], key=f"pwd_{cand['id']}")
+                        
+                        app_c1, app_c2 = st.columns(2)
+                        conf_desig = app_c1.text_input("Confirm Designation *", value=cand.get("designation") or "Associate", key=f"c_desig_{cand['id']}")
+                        conf_cat = app_c2.selectbox("Confirm Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key=f"c_cat_{cand['id']}")
+                        
+                        sel_shift = app2.selectbox("Confirm Shift Timing *", STANDARD_SHIFTS, key=f"shift_{cand['id']}")
+                        sel_wo = app1.selectbox("Confirm Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key=f"wo_{cand['id']}")
 
-                with t_cli_add:
-                    with st.form("add_client_portal_form"):
-                        cl_name = st.text_input("Client Company Name *")
-                        cl_code = st.text_input("Client Code *")
-                        cl_gst = st.text_input("Client GST Number *")
-                        cl_serv = st.number_input("Service Charge Rate (%) *", value=10.0, step=0.5)
-                        cl_full_addr = st.text_area("Plant Full Address")
-                        cl_c_name = st.text_input("Contact Person Name")
-                        cl_c_email = st.text_input("Contact Person Email")
-                        cl_c_mobile = st.text_input("Contact Person Mobile Number")
-                        assigned_ent = st.selectbox("Assign Entity Provider", options=list(e_dict.keys()) if e_dict else ["No Entity"])
-                        g_col1, g_col2 = st.columns(2)
-                        cl_lat = g_col1.number_input("Latitude", format="%.6f", value=18.651200)
-                        cl_lon = g_col2.number_input("Longitude", format="%.6f", value=73.805500)
+                        col_act1, col_act2 = st.columns(2)
+                        if col_act1.button("Approve and Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
+                            supabase.table("employees").update({
+                                "employee_code": set_user_id, 
+                                "user_id": set_user_id, 
+                                "password": set_pwd,
+                                "designation": conf_desig,
+                                "category": conf_cat,
+                                "status": "APPROVED",
+                                "weekly_off_day": sel_wo,
+                                "shift_hours": 8.5,
+                                "entity_id": selected_ent.get("id", cand.get("entity_id"))
+                            }).eq("id", cand["id"]).execute()
+                            
+                            st.cache_data.clear()
+                            msg = f"Hello {cand['full_name']}, Welcome! Your ESS Portal login credentials are: User ID: {set_user_id}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
+                            encoded_msg = urllib.parse.quote(msg)
+                            wa_url = f"https://wa.me/91{cand['phone_number']}?text={encoded_msg}"
+                            
+                            st.success(f"Candidate approved! User ID: {set_user_id}")
+                            st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">Send Login via WhatsApp</a>', unsafe_allow_html=True)
 
-                        if st.form_submit_button("Save Client Details", type="primary"):
-                            if cl_name and cl_code:
-                                supabase.table("clients").insert({
-                                    "name": cl_name, "client_code": cl_code, "gst_number": cl_gst,
-                                    "service_charge_pct": cl_serv,
-                                    "plant_location": cl_full_addr, "contact_person_name": cl_c_name,
-                                    "contact_person_email": cl_c_email, "contact_person_mobile": cl_c_mobile,
-                                    "latitude": cl_lat, "longitude": cl_lon, "entity_id": e_dict.get(assigned_ent)
-                                }).execute()
-                                st.cache_data.clear()
-                                st.success("✅ Data Saved Successfully: Client registered!")
-                                st.rerun()
+                        if col_act2.button("Reject and Delete Application", key=f"rej_{cand['id']}"):
+                            supabase.table("employees").delete().eq("id", cand["id"]).execute()
+                            st.cache_data.clear()
+                            st.warning("Application rejected successfully!")
+                            st.rerun()
+            else:
+                st.info("No candidates pending admin approval.")
 
-                with t_cli_edit:
-                    clis_all = fetch_cached_clients()
-                    if clis_all:
-                        cli_select_map = {c["name"]: c for c in clis_all}
-                        sel_c_e = st.selectbox("Select Client to Edit/Delete", list(cli_select_map.keys()))
-                        curr_c = cli_select_map[sel_c_e]
-                        with st.form("edit_client_portal_form"):
-                            cl_up_name = st.text_input("Client Name", value=curr_c.get("name", ""))
-                            cl_up_gst = st.text_input("Client GST", value=curr_c.get("gst_number", ""))
-                            cl_up_serv = st.number_input("Service Charge Rate (%)", value=float(curr_c.get("service_charge_pct") or 10.0), step=0.5)
-                            cl_up_addr = st.text_area("Address", value=curr_c.get("plant_location", ""))
-                            cl_up_cn = st.text_input("Contact Person", value=curr_c.get("contact_person_name", ""))
-                            cl_up_ce = st.text_input("Email", value=curr_c.get("contact_person_email", ""))
-                            cl_up_cm = st.text_input("Mobile", value=curr_c.get("contact_person_mobile", ""))
-                            cg1, cg2 = st.columns(2)
-                            cl_up_lat = cg1.number_input("Latitude", format="%.6f", value=float(curr_c.get("latitude", 18.6512)))
-                            cl_up_lon = cg2.number_input("Longitude", format="%.6f", value=float(curr_c.get("longitude", 73.8055)))
-
-                            cb1, cb2 = st.columns(2)
-                            if cb1.form_submit_button("Update Client", type="primary"):
-                                supabase.table("clients").update({
-                                    "name": cl_up_name, "gst_number": cl_up_gst, "service_charge_pct": cl_up_serv,
-                                    "plant_location": cl_up_addr, "contact_person_name": cl_up_cn, 
-                                    "contact_person_email": cl_up_ce, "contact_person_mobile": cl_up_cm, 
-                                    "latitude": cl_up_lat, "longitude": cl_up_lon
-                                }).eq("id", curr_c["id"]).execute()
-                                st.cache_data.clear()
-                                st.success("✅ Data Updated Successfully: Client geofence & details refreshed!")
-                                st.rerun()
-                            if cb2.form_submit_button("🗑️ Delete Client"):
-                                supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
-                                st.cache_data.clear()
-                                st.warning("🗑️ Data Deleted Successfully: Client removed!")
-                                st.rerun()
-                    else:
-                        st.info("ℹ️ No clients available to edit.")
-
-            st.write("---")
-            with st.expander("🎉 Configure Client-wise Paid Holidays (PH) for Entity"):
-                with st.form("add_ph_form"):
-                    ph_col1, ph_col2 = st.columns(2)
-                    sel_ph_ent = ph_col1.selectbox("Select Entity / फर्म निवडा", list(e_dict.keys()) if e_dict else ["No Entity"])
-                    sel_ph_cli = ph_col2.selectbox("Select Client Site / कंपनी निवडा", list(cli_select_map.keys()) if 'cli_select_map' in locals() and cli_select_map else ["No Client"])
-
-                    ph_date = ph_col1.date_input("Holiday Date / सुट्टीची तारीख", value=date.today())
-                    ph_name = ph_col2.text_input("Holiday Name / सणाचे नाव (उदा. Diwali, Independence Day)")
-
-                    if st.form_submit_button("Save Paid Holiday / सवेतन सुट्टी जतन करा", type="primary"):
-                        if ph_name and e_dict:
-                            try:
-                                supabase.table("paid_holidays").insert({
-                                    "entity_id": e_dict[sel_ph_ent],
-                                    "client_id": cli_select_map[sel_ph_cli]["id"] if 'cli_select_map' in locals() and sel_ph_cli in cli_select_map else None,
-                                    "holiday_date": str(ph_date),
-                                    "holiday_name": ph_name
-                                }).execute()
-                                st.success(f"✅ Paid Holiday '{ph_name}' added successfully!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error saving PH: {e}")
-
+        # 4. Salary Structure Rules
         elif selected_panel == "Salary Structure Rules":
             st.subheader("Configure Salary Structure & CTC Rules")
-            tab_sal_add, tab_sal_edit = st.tabs(["➕ Define Salary Rule", "✏️ Edit / Delete Salary Rule"])
+            tab_sal_add, tab_sal_edit = st.tabs(["Define Salary Rule", "Edit / Delete Salary Rule"])
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
             ent_opts = {e["name"]: e["id"] for e in ent_list}
@@ -1146,25 +1019,25 @@ else:
 
                     st.markdown("##### 1. Gross Earnings Components")
                     sr3, sr4, sr5, sr6, sr7 = st.columns(5)
-                    r_basic = sr3.number_input("Basic Pay (₹)", value=14010.0)
-                    r_da = sr4.number_input("DA (₹)", value=2511.0)
-                    r_hra = sr5.number_input("HRA (₹)", value=826.0)
-                    r_other = sr6.number_input("Other (₹)", value=813.0)
-                    r_ot = sr7.number_input("OT Rate / Hour (₹)", value=120.0)
+                    r_basic = sr3.number_input("Basic Pay (Rs.)", value=14010.0)
+                    r_da = sr4.number_input("DA (Rs.)", value=2511.0)
+                    r_hra = sr5.number_input("HRA (Rs.)", value=826.0)
+                    r_other = sr6.number_input("Other (Rs.)", value=813.0)
+                    r_ot = sr7.number_input("OT Rate / Hour (Rs.)", value=120.0)
 
                     gross = r_basic + r_da + r_hra + r_other
 
-                    st.markdown("##### 2. Employee Deductions (On Pay Slip)")
+                    st.markdown("##### 2. Employee Deductions")
                     sr8, sr9, sr10 = st.columns(3)
                     r_pf = sr8.number_input("Employee PF (%)", value=12.0)
                     r_esic = sr9.number_input("Employee ESIC (%)", value=0.75)
-                    r_pt = sr10.number_input("PT Amount (₹)", value=200.0)
+                    r_pt = sr10.number_input("PT Amount (Rs.)", value=200.0)
 
-                    st.markdown("##### 3. Employer Contributions / Company Cost (Offer Letter CTC - No Gratuity)")
+                    st.markdown("##### 3. Employer Contributions & CTC")
                     er1, er2, er3 = st.columns(3)
                     r_er_pf = er1.number_input("Employer PF (%)", value=13.0)
                     r_er_esic = er2.number_input("Employer ESIC (%)", value=3.25)
-                    r_bonus = er3.number_input("Bonus (₹)", value=0.0)
+                    r_bonus = er3.number_input("Bonus (Rs.)", value=0.0)
 
                     er_pf_val = min(round((r_basic + r_da) * (r_er_pf / 100.0), 2), 1950.0)
                     er_esic_val = round(gross * (r_er_esic / 100.0), 2)
@@ -1173,11 +1046,11 @@ else:
 
                     st.markdown(f"""
                     <div style="background-color: #F1F5F9; border-left: 4px solid #0284C7; padding: 10px; border-radius: 4px; margin: 10px 0px;">
-                        <b>Gross Wages:</b> ₹{gross:,.2f}/month | 
-                        <b>Employer PF:</b> ₹{er_pf_val:,.2f} | 
-                        <b>Employer ESIC:</b> ₹{er_esic_val:,.2f}<br>
-                        <b>Total Monthly CTC:</b> ₹{m_ctc:,.2f} | 
-                        <b>Total Annual CTC:</b> ₹{a_ctc:,.2f}
+                        <b>Gross Wages:</b> Rs.{gross:,.2f}/month | 
+                        <b>Employer PF:</b> Rs.{er_pf_val:,.2f} | 
+                        <b>Employer ESIC:</b> Rs.{er_esic_val:,.2f}<br>
+                        <b>Total Monthly CTC:</b> Rs.{m_ctc:,.2f} | 
+                        <b>Total Annual CTC:</b> Rs.{a_ctc:,.2f}
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -1190,13 +1063,13 @@ else:
                             "employer_pf_pct": r_er_pf, "employer_esic_pct": r_er_esic,
                             "statutory_bonus": r_bonus, "monthly_ctc": m_ctc, "annual_ctc": a_ctc
                         }).execute()
-                        st.success("✅ Data Saved Successfully: Salary structure rule added!")
+                        st.success("Salary structure rule added successfully!")
                         st.rerun()
 
             with tab_sal_edit:
                 all_sals = supabase.table("salary_structures").select("*").execute().data or []
                 if all_sals:
-                    sal_map = {f"Rule #{s['id'][:6]} - {s.get('designation')} (₹{s.get('monthly_ctc', 0)})": s for s in all_sals}
+                    sal_map = {f"Rule #{s['id'][:6]} - {s.get('designation')} (Rs.{s.get('monthly_ctc', 0)})": s for s in all_sals}
                     sel_sal = st.selectbox("Select Rule to Update/Delete", list(sal_map.keys()))
                     curr_s = sal_map[sel_sal]
 
@@ -1228,190 +1101,50 @@ else:
                                 "employer_pf_pct": e_er_pf, "employer_esic_pct": e_er_esic,
                                 "monthly_ctc": up_m_ctc, "annual_ctc": up_m_ctc * 12
                             }).eq("id", curr_s["id"]).execute()
-                            st.success("✅ Data Updated Successfully: Rule refreshed!")
+                            st.success("Rule refreshed successfully!")
                             st.rerun()
 
-                        if sb2.form_submit_button("🗑️ Delete Salary Rule"):
+                        if sb2.form_submit_button("Delete Salary Rule"):
                             supabase.table("salary_structures").delete().eq("id", curr_s["id"]).execute()
-                            st.warning("🗑️ Data Deleted Successfully: Salary rule removed!")
+                            st.warning("Salary rule removed successfully!")
                             st.rerun()
                 else:
-                    st.info("ℹ️ No salary structure rules defined yet.")
+                    st.info("No salary structure rules defined yet.")
 
-        elif selected_panel == "PPE & Uniform Tracker":
-            st.subheader("PPE & Uniform Tracker (Management Desk)")
-            tab_ppe_issue, tab_ppe_edit, tab_ppe_req, tab_ppe_cat = st.tabs([
-                "➕ Issue / Add PPE", 
-                "✏️ Edit / Delete PPE", 
-                "📋 Pending Requests",
-                "🏷️ PPE Price Catalog"
-            ])
-            
-            ent_list = fetch_cached_entities()
-            cli_list = fetch_cached_clients()
+        # 5. Attendance & OT Live Edit
+        elif selected_panel == "Attendance & OT Live Edit":
+            st.subheader("Manual Attendance, Shift Timings & OT Management")
+            at_tab_save, at_tab_del = st.tabs(["Add / Update Attendance Record", "Delete Attendance Record"])
             emp_list = fetch_cached_employees()
+            emp_map = {f"[{e.get('employee_code')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
 
-            p_e_map = {e["name"]: e["id"] for e in ent_list}
-            p_c_map = {c["name"]: c["id"] for c in cli_list}
-            p_emp_map = {f"[{e.get('employee_code', 'N/A')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
+            with at_tab_save:
+                with st.form("attendance_save_form"):
+                    at1, at2, at3 = st.columns(3)
+                    sel_e = at1.selectbox("Select Employee", options=list(emp_map.keys()) if emp_map else ["No Employees"])
+                    sel_d = at2.date_input("Date", value=date.today())
+                    sel_st = at3.selectbox("Status", ["P (Present)", "A (Absent)", "WO (Week Off)", "PH (Paid Holiday)"])
+                    ot_h = at1.number_input("Overtime Hours (OT)", min_value=0.0, max_value=16.0, step=0.5, value=0.0)
 
-            emp_obj_lookup = {e["id"]: e for e in emp_list}
-            ent_name_lookup = {e["id"]: e["name"] for e in ent_list}
-            cli_name_lookup = {c["id"]: c["name"] for c in cli_list}
+                    if st.form_submit_button("Save / Update Attendance", type="primary"):
+                        if emp_map:
+                            st_code = sel_st[:sel_st.find(" ")]
+                            supabase.table("attendance").upsert({
+                                "employee_id": emp_map[sel_e], "date": str(sel_d),
+                                "status": st_code, "ot_hours": ot_h, "is_valid_geo": True
+                            }, on_conflict="employee_id,date").execute()
+                            st.success(f"Attendance logged for {sel_e}!")
 
-            with tab_ppe_cat:
-                st.write("##### 🏷️ Entity & Client Wise PPE Pricing Master")
-                with st.form("add_ppe_catalog_form"):
-                    cat_c1, cat_c2 = st.columns(2)
-                    cat_ent = cat_c1.selectbox("Select Entity / फर्म *", list(p_e_map.keys()) if p_e_map else ["No Entity"])
-                    cat_cli = cat_c2.selectbox("Select Client Site / कंपनी *", list(p_c_map.keys()) if p_c_map else ["No Client"])
+            with at_tab_del:
+                with st.form("attendance_del_form"):
+                    d_sel_e = st.selectbox("Select Employee to Remove Attendance", options=list(emp_map.keys()) if emp_map else ["No Employees"])
+                    d_sel_d = st.date_input("Date to Delete", value=date.today())
+                    if st.form_submit_button("Delete Attendance Record"):
+                        if emp_map:
+                            supabase.table("attendance").delete().eq("employee_id", emp_map[d_sel_e]).eq("date", str(d_sel_d)).execute()
+                            st.warning(f"Attendance deleted for {d_sel_d}!")
 
-                    cat_c3, cat_c4 = st.columns(2)
-                    cat_item = cat_c3.text_input("PPE Item Name * (उदा. Safety Shoes, Helmet, Uniform Shirt/Pant)")
-                    cat_price = cat_c4.number_input("Unit Price / किंमत (₹) *", min_value=0.0, step=10.0, value=100.0)
-
-                    if st.form_submit_button("Save Item in Catalog / दर जतन करा", type="primary"):
-                        if cat_item and p_e_map and p_c_map:
-                            try:
-                                supabase.table("ppe_catalog").upsert({
-                                    "entity_id": p_e_map[cat_ent],
-                                    "client_id": p_c_map[cat_cli],
-                                    "item_name": cat_item.strip(),
-                                    "price": cat_price
-                                }, on_conflict="entity_id,client_id,item_name").execute()
-                                st.success(f"✅ {cat_item} चे दर (₹{cat_price:,.2f}) जतन झाले!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error saving catalog: {e}")
-
-                st.write("---")
-                st.write("##### 📋 Live Configured PPE Catalog Rates")
-                catalog_data = supabase.table("ppe_catalog").select("*").execute().data or []
-                if catalog_data:
-                    cat_rows = []
-                    for c_item in catalog_data:
-                        cat_rows.append({
-                            "Entity": ent_name_lookup.get(c_item.get("entity_id"), "N/A"),
-                            "Client Site": cli_name_lookup.get(c_item.get("client_id"), "N/A"),
-                            "Item Name": c_item.get("item_name"),
-                            "Rate (₹)": f"₹{float(c_item.get('price', 0)):,.2f}"
-                        })
-                    st.dataframe(pd.DataFrame(cat_rows), use_container_width=True)
-                else:
-                    st.info("ℹ️ अद्याप कोणत्याही PPE वस्तूंचे दर सेट केलेले नाहीत.")
-
-            with tab_ppe_issue:
-                with st.form("manual_ppe_form"):
-                    col_p1, col_p2, col_p3 = st.columns(3)
-                    p_sel_ent = col_p1.selectbox("Entity", options=list(p_e_map.keys()) if p_e_map else ["No Entity"])
-                    p_sel_cli = col_p2.selectbox("Client Site", options=list(p_c_map.keys()) if p_c_map else ["No Client"])
-                    p_sel_emp = col_p3.selectbox("Employee *", options=list(p_emp_map.keys()) if p_emp_map else ["No Employee"])
-
-                    col_p4, col_p5, col_p6 = st.columns(3)
-                    p_item = col_p4.selectbox("PPE Item", ["Safety Shoes", "Helmet", "Safety Goggles", "Uniform Shirt/Pant", "ID Card"])
-                    p_size = col_p5.text_input("Size (e.g. 8, 9, L, XL)")
-                    p_qty = col_p6.number_input("Quantity", min_value=1, value=1)
-
-                    if st.form_submit_button("Issue PPE Record", type="primary"):
-                        if not p_emp_map:
-                            st.error("Please add employees first!")
-                        else:
-                            supabase.table("ppe_records").insert({
-                                "employee_id": p_emp_map[p_sel_emp],
-                                "item_type": p_item,
-                                "size": p_size,
-                                "quantity": p_qty,
-                                "status": "APPROVED",
-                                "assigned_date": str(date.today())
-                            }).execute()
-                            st.success("✅ Data Saved Successfully: PPE Issued and Logged!")
-                            st.rerun()
-
-            with tab_ppe_edit:
-                all_ppes = supabase.table("ppe_records").select("*").execute().data or []
-                if all_ppes:
-                    ppe_select_options = {}
-                    for p in all_ppes:
-                        emp_info = emp_obj_lookup.get(p.get("employee_id"), {})
-                        ppe_select_options[f"[{emp_info.get('employee_code', 'N/A')}] {emp_info.get('full_name', 'Unknown')} - {p.get('item_type')} (Qty: {p.get('quantity')})"] = p
-
-                    sel_p = st.selectbox("Select PPE Record to Edit/Delete", list(ppe_select_options.keys()))
-                    curr_p = ppe_select_options[sel_p]
-
-                    with st.form("edit_ppe_crud_form"):
-                        pe1, pe2 = st.columns(2)
-                        up_item = pe1.text_input("Item Type", value=curr_p.get("item_type", ""))
-                        up_size = pe2.text_input("Size", value=curr_p.get("size", ""))
-                        up_qty = pe1.number_input("Quantity", min_value=1, value=int(curr_p.get("quantity", 1)))
-
-                        pb1, pb2 = st.columns(2)
-                        if pb1.form_submit_button("Update PPE Record", type="primary"):
-                            supabase.table("ppe_records").update({
-                                "item_type": up_item,
-                                "size": up_size,
-                                "quantity": up_qty
-                            }).eq("id", curr_p["id"]).execute()
-                            st.success("✅ Data Updated Successfully: PPE record updated!")
-                            st.rerun()
-
-                        if pb2.form_submit_button("🗑️ Delete PPE Record"):
-                            supabase.table("ppe_records").delete().eq("id", curr_p["id"]).execute()
-                            st.warning("🗑️ Data Deleted Successfully: PPE record removed!")
-                            st.rerun()
-                else:
-                    st.info("ℹ️ No PPE records available to edit.")
-
-            with tab_ppe_req:
-                ppe_reqs = supabase.table("ppe_records").select("*").eq("status", "PENDING_ADMIN").order("created_at", desc=True).execute().data or []
-                if ppe_reqs:
-                    for req in ppe_reqs:
-                        req_emp = emp_obj_lookup.get(req.get("employee_id"), {})
-                        e_name = ent_name_lookup.get(req_emp.get("entity_id"), "N/A")
-                        c_name = cli_name_lookup.get(req_emp.get("client_id"), "N/A")
-
-                        st.markdown(f"""
-                        <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 5px solid #0284C7; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
-                            <b>Employee:</b> {req_emp.get('full_name', 'N/A')} (<b>Code:</b> {req_emp.get('employee_code', 'N/A')}) | <b>Designation:</b> {req_emp.get('designation', 'Staff')}<br/>
-                            <b>Entity:</b> {e_name} | <b>Client Site:</b> {c_name}<br/>
-                            <b>Requested Item:</b> <span style="color:#0284C7; font-weight:bold;">{req.get('item_type')}</span> | <b>Size:</b> {req.get('size')} | <b>Quantity:</b> {req.get('quantity')}
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                        col_r1, col_r2, _ = st.columns([1.5, 1.5, 5])
-                        if col_r1.button("✅ Approve PPE", key=f"app_ppe_{req['id']}", type="primary"):
-                            supabase.table("ppe_records").update({"status": "APPROVED", "assigned_date": str(date.today())}).eq("id", req["id"]).execute()
-                            st.success(f"PPE Item approved for {req_emp.get('full_name')}!")
-                            st.rerun()
-
-                        if col_r2.button("❌ Reject PPE", key=f"rej_ppe_{req['id']}"):
-                            supabase.table("ppe_records").update({"status": "REJECTED_BY_ADMIN"}).eq("id", req["id"]).execute()
-                            st.warning("PPE request rejected!")
-                            st.rerun()
-                else:
-                    st.info("ℹ️ No pending PPE requests found.")
-
-            st.write("---")
-            st.write("#### 📊 Full PPE Tracker Records")
-            all_ppe_list = supabase.table("ppe_records").select("*").order("created_at", desc=True).execute().data or []
-            if all_ppe_list:
-                formatted_ppe_rows = []
-                for p_rec in all_ppe_list:
-                    emp_data_match = emp_obj_lookup.get(p_rec.get("employee_id"), {})
-                    formatted_ppe_rows.append({
-                        "Emp Code": emp_data_match.get("employee_code", "N/A"),
-                        "Employee Name": emp_data_match.get("full_name", "N/A"),
-                        "Firm / Entity": ent_name_lookup.get(emp_data_match.get("entity_id"), "N/A"),
-                        "Client Site": cli_name_lookup.get(emp_data_match.get("client_id"), "N/A"),
-                        "Item Type": p_rec.get("item_type"),
-                        "Size": p_rec.get("size"),
-                        "Quantity": p_rec.get("quantity"),
-                        "Status": p_rec.get("status"),
-                        "Assigned Date": p_rec.get("assigned_date") or str(p_rec.get("created_at"))[:10]
-                    })
-                st.dataframe(pd.DataFrame(formatted_ppe_rows), use_container_width=True)
-            else:
-                st.info("ℹ️ No PPE issuance records found.")
-
+        # 6. Monthly Payroll Processing
         elif selected_panel == "Monthly Payroll Processing":
             st.subheader("Monthly Payroll Engine & Wage Sheet (Full Statutory Format)")
 
@@ -1438,24 +1171,12 @@ else:
                 
                 payroll_rows = []
                 for emp_item in emp_records:
-                    sal_struct = None
-                    try:
-                        sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp_item.get("entity_id"))
-                        if emp_item.get("client_id"):
-                            sr_query = sr_query.eq("client_id", emp_item.get("client_id"))
-                        if emp_item.get("designation"):
-                            sr_query = sr_query.ilike("designation", emp_item.get("designation").strip())
-                        if emp_item.get("category"):
-                            sr_query = sr_query.eq("category", emp_item.get("category").strip())
-                        s_matched = sr_query.execute().data
-                        if s_matched:
-                            sal_struct = s_matched[0]
-                        else:
-                            fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", emp_item.get("entity_id")).execute().data
-                            if fallback_res:
-                                sal_struct = fallback_res[0]
-                    except Exception:
-                        pass
+                    sal_struct = get_exact_salary_rule(
+                        emp_item.get("entity_id"),
+                        emp_item.get("client_id"),
+                        emp_item.get("designation"),
+                        emp_item.get("category")
+                    )
 
                     b_pay = float(sal_struct.get("basic", 14010.0)) if sal_struct else 14010.0
                     d_pay = float(sal_struct.get("da", 2511.0)) if sal_struct else 2511.0
@@ -1585,26 +1306,27 @@ else:
                 with col_lk1:
                     csv_data = df_wage.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        "📥 Download Complete Wage Sheet (Excel / CSV)",
+                        "Download Complete Wage Sheet (CSV)",
                         data=csv_data,
                         file_name=f"Wage_Sheet_{sel_month.replace(' ', '_')}.csv",
                         mime="text/csv"
                     )
                 with col_lk2:
-                    if st.button("🔒 Dual-Confirm & Lock Wage Sheet", type="primary"):
+                    if st.button("Dual-Confirm & Lock Wage Sheet", type="primary"):
                         if sel_ent_name != "All Entities" and e_opts.get(sel_ent_name):
                             supabase.table("locked_payrolls").upsert({
                                 "entity_id": e_opts[sel_ent_name],
                                 "payroll_month": sel_month,
                                 "is_locked": True
                             }, on_conflict="entity_id,payroll_month").execute()
-                        st.success(f"✅ Wage Sheet for {sel_month} locked! Now visible to employees.")
+                        st.success(f"Wage Sheet for {sel_month} locked! Now visible to employees.")
             else:
-                st.info("ℹ️ No approved employees found for the selected entity filter.")
+                st.info("No approved employees found for the selected entity filter.")
 
+        # 7. Client Billing & Invoices
         elif selected_panel == "Client Billing & Invoices":
             st.subheader("Client Billing & Tax Invoice Generator (Exact Replica)")
-            t_inv_gen, t_inv_hist = st.tabs(["➕ Generate Tax Invoice", "📑 Invoices History & Downloads"])
+            t_inv_gen, t_inv_hist = st.tabs(["Generate Tax Invoice", "Invoices History & Downloads"])
             cli_list = fetch_cached_clients()
             ent_list = fetch_cached_entities()
             c_dict = {c["name"]: c for c in cli_list}
@@ -1642,7 +1364,7 @@ else:
                     s_c1, s_c2, s_c3 = st.columns(3)
                     inv_month = s_c1.text_input("Billing Month / Service Period", value="Aug-2026 Khed City")
                     inv_hsn = s_c2.text_input("HSN/SAC", value="996511")
-                    inv_subtotal = s_c3.number_input("Taxable Amount (Without GST ₹) *", value=115146.0)
+                    inv_subtotal = s_c3.number_input("Taxable Amount (Without GST Rs.) *", value=115146.0)
 
                     if st.form_submit_button("Generate & Save Tax Invoice", type="primary"):
                         try:
@@ -1656,7 +1378,7 @@ else:
                                 "billing_month": inv_month, "hsn_sac": inv_hsn, "total_amount": inv_subtotal, 
                                 "payment_status": "PENDING"
                             }).execute()
-                            st.success("✅ Data Saved Successfully: Tax Invoice generated!")
+                            st.success("Tax Invoice generated successfully!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error saving invoice: {e}")
@@ -1665,14 +1387,15 @@ else:
                 inv_records = supabase.table("client_invoices").select("*").execute().data or []
                 if inv_records:
                     for inv in inv_records:
-                        with st.expander(f"Invoice: {inv.get('invoice_number')} | Month: {inv.get('billing_month')} | Total: ₹{inv.get('total_amount', 0):,.2f}"):
+                        with st.expander(f"Invoice: {inv.get('invoice_number')} | Month: {inv.get('billing_month')} | Total: Rs.{inv.get('total_amount', 0):,.2f}"):
                             ent_obj = next((e for e in ent_list if e["id"] == inv.get("entity_id")), None)
                             cli_obj = next((c for c in cli_list if c["id"] == inv.get("client_id")), None)
                             inv_pdf = generate_exact_tax_invoice(inv, ent_obj, cli_obj)
-                            st.download_button(f"📥 Download Exact Tax Invoice PDF ({inv.get('invoice_number')})", data=inv_pdf, file_name=f"Invoice_{inv.get('invoice_number').replace('/', '_')}.pdf", mime="application/pdf", key=f"dn_inv_{inv['id']}")
+                            st.download_button(f"Download Exact Tax Invoice PDF ({inv.get('invoice_number')})", data=inv_pdf, file_name=f"Invoice_{inv.get('invoice_number').replace('/', '_')}.pdf", mime="application/pdf", key=f"dn_inv_{inv['id']}")
                 else:
-                    st.info("ℹ️ No tax invoices generated yet.")
+                    st.info("No tax invoices generated yet.")
 
+        # 8. Advance / Loan Desk
         elif selected_panel == "Advance / Loan Desk":
             st.subheader("Salary Advance & Loan Requests")
 
@@ -1690,7 +1413,7 @@ else:
                 ent_map = {e["id"]: e["name"] for e in all_ents_data}
                 cli_map = {c["id"]: c["name"] for c in all_clis_data}
 
-                t_adv_pend, t_adv_all = st.tabs(["⏳ Pending Requests", "📋 All Records"])
+                t_adv_pend, t_adv_all = st.tabs(["Pending Requests", "All Records"])
 
                 with t_adv_pend:
                     pending_adv = [a for a in adv_reqs if a.get("status") == "PENDING_ADMIN"]
@@ -1704,23 +1427,23 @@ else:
                             <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 5px solid #F59E0B; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
                                 <b>Employee:</b> {req_emp.get('full_name', 'N/A')} (<b>Code:</b> {req_emp.get('employee_code', 'N/A')}) | <b>Designation:</b> {req_emp.get('designation', 'Staff')}<br/>
                                 <b>Entity:</b> {e_name} | <b>Client Work Site:</b> {c_name}<br/>
-                                <b>Requested Amount:</b> <span style="font-size: 16px; font-weight: bold; color: #0F172A;">₹{float(req.get('amount', 0)):,.2f}</span> | <b>Date:</b> {req.get('requested_date') or str(req.get('created_at'))[:10]}<br/>
+                                <b>Requested Amount:</b> <span style="font-size: 16px; font-weight: bold; color: #0F172A;">Rs.{float(req.get('amount', 0)):,.2f}</span> | <b>Date:</b> {req.get('requested_date') or str(req.get('created_at'))[:10]}<br/>
                                 <b>Reason:</b> {req.get('reason', 'None')}
                             </div>
                             """, unsafe_allow_html=True)
 
                             col_ap, col_rj, _ = st.columns([1.5, 1.5, 5])
-                            if col_ap.button("✅ Approve Advance", key=f"adv_app_{req['id']}", type="primary"):
+                            if col_ap.button("Approve Advance", key=f"adv_app_{req['id']}", type="primary"):
                                 supabase.table("advance_salaries").update({"status": "APPROVED"}).eq("id", req["id"]).execute()
                                 st.success(f"Advance Approved for {req_emp.get('full_name')}!")
                                 st.rerun()
 
-                            if col_rj.button("❌ Reject Request", key=f"adv_rej_{req['id']}"):
+                            if col_rj.button("Reject Request", key=f"adv_rej_{req['id']}"):
                                 supabase.table("advance_salaries").update({"status": "REJECTED_BY_ADMIN"}).eq("id", req["id"]).execute()
                                 st.warning("Advance request rejected!")
                                 st.rerun()
                     else:
-                        st.info("ℹ️ No pending advance requests from supervisor.")
+                        st.info("No pending advance requests from supervisor.")
 
                 with t_adv_all:
                     table_rows = []
@@ -1732,112 +1455,364 @@ else:
                             "Employee Name": emp_info.get("full_name", "N/A"),
                             "Entity": ent_map.get(emp_info.get("entity_id"), "N/A"),
                             "Client Site": cli_map.get(emp_info.get("client_id"), "N/A"),
-                            "Amount (₹)": f"{float(a.get('amount', 0)):,.2f}",
+                            "Amount (Rs.)": f"{float(a.get('amount', 0)):,.2f}",
                             "Reason": a.get("reason", ""),
                             "Status": a.get("status", "PENDING")
                         })
                     st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
             else:
-                st.info("ℹ️ No salary advance records found.")
+                st.info("No salary advance records found.")
 
-        # 9. Attendance & OT Live Edit
-        elif selected_panel == "Attendance & OT Live Edit":
-            st.subheader("Manual Attendance, Shift Timings & OT Management")
-            at_tab_save, at_tab_del = st.tabs(["📝 Add / Update Attendance Record", "🗑️ Delete Attendance Record"])
+        # 9. PPE & Uniform Tracker
+        elif selected_panel == "PPE & Uniform Tracker":
+            st.subheader("PPE & Uniform Tracker (Management Desk)")
+            tab_ppe_issue, tab_ppe_edit, tab_ppe_req, tab_ppe_cat = st.tabs([
+                "Issue / Add PPE", 
+                "Edit / Delete PPE", 
+                "Pending Requests",
+                "PPE Price Catalog"
+            ])
+            
+            ent_list = fetch_cached_entities()
+            cli_list = fetch_cached_clients()
             emp_list = fetch_cached_employees()
-            emp_map = {f"[{e.get('employee_code')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
 
-            with at_tab_save:
-                with st.form("attendance_save_form"):
-                    at1, at2, at3 = st.columns(3)
-                    sel_e = at1.selectbox("Select Employee", options=list(emp_map.keys()) if emp_map else ["No Employees"])
-                    sel_d = at2.date_input("Date", value=date.today())
-                    sel_st = at3.selectbox("Status", ["P (Present)", "A (Absent)", "WO (Week Off)", "PH (Paid Holiday)"])
-                    ot_h = at1.number_input("Overtime Hours (OT)", min_value=0.0, max_value=16.0, step=0.5, value=0.0)
+            p_e_map = {e["name"]: e["id"] for e in ent_list}
+            p_c_map = {c["name"]: c["id"] for c in cli_list}
+            p_emp_map = {f"[{e.get('employee_code', 'N/A')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
 
-                    if st.form_submit_button("Save / Update Attendance", type="primary"):
-                        if emp_map:
-                            st_code = sel_st[:sel_st.find(" ")]
-                            supabase.table("attendance").upsert({
-                                "employee_id": emp_map[sel_e], "date": str(sel_d),
-                                "status": st_code, "ot_hours": ot_h, "is_valid_geo": True
-                            }, on_conflict="employee_id,date").execute()
-                            st.success(f"✅ Data Updated Successfully: Attendance logged for {sel_e}!")
+            emp_obj_lookup = {e["id"]: e for e in emp_list}
+            ent_name_lookup = {e["id"]: e["name"] for e in ent_list}
+            cli_name_lookup = {c["id"]: c["name"] for c in cli_list}
+
+            with tab_ppe_cat:
+                st.write("##### Entity & Client Wise PPE Pricing Master")
+                with st.form("add_ppe_catalog_form"):
+                    cat_c1, cat_c2 = st.columns(2)
+                    cat_ent = cat_c1.selectbox("Select Entity *", list(p_e_map.keys()) if p_e_map else ["No Entity"])
+                    cat_cli = cat_c2.selectbox("Select Client Site *", list(p_c_map.keys()) if p_c_map else ["No Client"])
+
+                    cat_c3, cat_c4 = st.columns(2)
+                    cat_item = cat_c3.text_input("PPE Item Name * (e.g. Safety Shoes, Helmet, Uniform Shirt/Pant)")
+                    cat_price = cat_c4.number_input("Unit Price (Rs.) *", min_value=0.0, step=10.0, value=100.0)
+
+                    if st.form_submit_button("Save Item in Catalog", type="primary"):
+                        if cat_item and p_e_map and p_c_map:
+                            try:
+                                supabase.table("ppe_catalog").upsert({
+                                    "entity_id": p_e_map[cat_ent],
+                                    "client_id": p_c_map[cat_cli],
+                                    "item_name": cat_item.strip(),
+                                    "price": cat_price
+                                }, on_conflict="entity_id,client_id,item_name").execute()
+                                st.success(f"{cat_item} rate (Rs. {cat_price:,.2f}) saved successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving catalog: {e}")
+
+                st.write("---")
+                st.write("##### Live Configured PPE Catalog Rates")
+                catalog_data = supabase.table("ppe_catalog").select("*").execute().data or []
+                if catalog_data:
+                    cat_rows = []
+                    for c_item in catalog_data:
+                        cat_rows.append({
+                            "Entity": ent_name_lookup.get(c_item.get("entity_id"), "N/A"),
+                            "Client Site": cli_name_lookup.get(c_item.get("client_id"), "N/A"),
+                            "Item Name": c_item.get("item_name"),
+                            "Rate (Rs.)": f"Rs. {float(c_item.get('price', 0)):,.2f}"
+                        })
+                    st.dataframe(pd.DataFrame(cat_rows), use_container_width=True)
+                else:
+                    st.info("No PPE catalog rates configured yet.")
+
+            with tab_ppe_issue:
+                with st.form("manual_ppe_form"):
+                    col_p1, col_p2, col_p3 = st.columns(3)
+                    p_sel_ent = col_p1.selectbox("Entity", options=list(p_e_map.keys()) if p_e_map else ["No Entity"])
+                    p_sel_cli = col_p2.selectbox("Client Site", options=list(p_c_map.keys()) if p_c_map else ["No Client"])
+                    p_sel_emp = col_p3.selectbox("Employee *", options=list(p_emp_map.keys()) if p_emp_map else ["No Employee"])
+
+                    col_p4, col_p5, col_p6 = st.columns(3)
+                    p_item = col_p4.selectbox("PPE Item", ["Safety Shoes", "Helmet", "Safety Goggles", "Uniform Shirt/Pant", "ID Card"])
+                    p_size = col_p5.text_input("Size (e.g. 8, 9, L, XL)")
+                    p_qty = col_p6.number_input("Quantity", min_value=1, value=1)
+
+                    if st.form_submit_button("Issue PPE Record", type="primary"):
+                        if not p_emp_map:
+                            st.error("Please add employees first!")
                         else:
-                            st.warning("⚠️ No active employees available to log attendance.")
-
-            with at_tab_del:
-                with st.form("attendance_del_form"):
-                    d_sel_e = st.selectbox("Select Employee to Remove Attendance", options=list(emp_map.keys()) if emp_map else ["No Employees"])
-                    d_sel_d = st.date_input("Date to Delete", value=date.today())
-                    if st.form_submit_button("🗑️ Delete Attendance Record"):
-                        if emp_map:
-                            supabase.table("attendance").delete().eq("employee_id", emp_map[d_sel_e]).eq("date", str(d_sel_d)).execute()
-                            st.warning(f"🗑️ Data Deleted Successfully: Attendance deleted for {d_sel_d}!")
-                        else:
-                            st.warning("⚠️ No active employees available.")
-
-        # 10. Candidate Approvals
-        elif selected_panel == "Candidate Approvals":
-            st.subheader("New Candidate Approvals & Login Dispatch (Admin Desk)")
-            cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
-            if cands:
-                ents = fetch_cached_entities()
-                pref_dict = {f"{e['name']} ({e['code_prefix']})": e for e in ents}
-                
-                for cand in cands:
-                    with st.expander(f"📋 Applicant: {cand['full_name']} (Mobile: {cand['phone_number']}) | DOB: {cand.get('dob')} | Gender: {cand.get('gender')}"):
-                        app1, app2 = st.columns(2)
-                        sel_pref_label = app1.selectbox("Select Entity Provider", options=list(pref_dict.keys()) if pref_dict else ["Default"], key=f"pref_{cand['id']}")
-                        selected_ent = pref_dict.get(sel_pref_label, {})
-                        prefix = selected_ent.get("code_prefix", "SE")
-                        
-                        generated_code = f"{prefix}{str(cand.get('id', '001'))[:4].upper()}"
-                        set_user_id = app1.text_input("User ID (Default Employee Code)", value=generated_code, key=f"uid_{cand['id']}")
-                        set_pwd = app2.text_input("Set Initial Password", value="emp" + cand['phone_number'][-4:], key=f"pwd_{cand['id']}")
-                        
-                        app_c1, app_c2 = st.columns(2)
-                        conf_desig = app_c1.text_input("Confirm Designation *", value=cand.get("designation") or "Associate", key=f"c_desig_{cand['id']}")
-                        conf_cat = app_c2.selectbox("Confirm Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key=f"c_cat_{cand['id']}")
-                        
-                        sel_shift = app2.selectbox("Confirm Shift Timing *", STANDARD_SHIFTS, key=f"shift_{cand['id']}")
-                        sel_wo = app1.selectbox("Confirm Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key=f"wo_{cand['id']}")
-
-                        col_act1, col_act2 = st.columns(2)
-                        if col_act1.button("✅ Approve & Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
-                            supabase.table("employees").update({
-                                "employee_code": set_user_id, 
-                                "user_id": set_user_id, 
-                                "password": set_pwd,
-                                "designation": conf_desig,
-                                "category": conf_cat,
+                            supabase.table("ppe_records").insert({
+                                "employee_id": p_emp_map[p_sel_emp],
+                                "item_type": p_item,
+                                "size": p_size,
+                                "quantity": p_qty,
                                 "status": "APPROVED",
-                                "weekly_off_day": sel_wo,
-                                "shift_hours": 8.5,
-                                "entity_id": selected_ent.get("id", cand.get("entity_id"))
-                            }).eq("id", cand["id"]).execute()
-                            
-                            st.cache_data.clear()
-                            
-                            msg = f"Hello {cand['full_name']}, Welcome! Your ESS Portal login credentials are: User ID: {set_user_id}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
-                            encoded_msg = urllib.parse.quote(msg)
-                            wa_url = f"https://wa.me/91{cand['phone_number']}?text={encoded_msg}"
-                            
-                            st.success(f"✅ Data Saved Successfully: Candidate approved! User ID: {set_user_id}")
-                            st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">📲 Send Login via WhatsApp to {cand["phone_number"]}</a>', unsafe_allow_html=True)
-
-                        if col_act2.button("🗑️ Reject & Delete Application", key=f"rej_{cand['id']}"):
-                            supabase.table("employees").delete().eq("id", cand["id"]).execute()
-                            st.cache_data.clear()
-                            st.warning("🗑️ Data Deleted Successfully: Application rejected!")
+                                "assigned_date": str(date.today())
+                            }).execute()
+                            st.success("PPE Issued and Logged successfully!")
                             st.rerun()
-            else:
-                st.info("ℹ️ No candidates pending admin approval at the moment.")
+
+            with tab_ppe_edit:
+                all_ppes = supabase.table("ppe_records").select("*").execute().data or []
+                if all_ppes:
+                    ppe_select_options = {}
+                    for p in all_ppes:
+                        emp_info = emp_obj_lookup.get(p.get("employee_id"), {})
+                        ppe_select_options[f"[{emp_info.get('employee_code', 'N/A')}] {emp_info.get('full_name', 'Unknown')} - {p.get('item_type')} (Qty: {p.get('quantity')})"] = p
+
+                    sel_p = st.selectbox("Select PPE Record to Edit/Delete", list(ppe_select_options.keys()))
+                    curr_p = ppe_select_options[sel_p]
+
+                    with st.form("edit_ppe_crud_form"):
+                        pe1, pe2 = st.columns(2)
+                        up_item = pe1.text_input("Item Type", value=curr_p.get("item_type", ""))
+                        up_size = pe2.text_input("Size", value=curr_p.get("size", ""))
+                        up_qty = pe1.number_input("Quantity", min_value=1, value=int(curr_p.get("quantity", 1)))
+
+                        pb1, pb2 = st.columns(2)
+                        if pb1.form_submit_button("Update PPE Record", type="primary"):
+                            supabase.table("ppe_records").update({
+                                "item_type": up_item,
+                                "size": up_size,
+                                "quantity": up_qty
+                            }).eq("id", curr_p["id"]).execute()
+                            st.success("PPE record updated successfully!")
+                            st.rerun()
+
+                        if pb2.form_submit_button("Delete PPE Record"):
+                            supabase.table("ppe_records").delete().eq("id", curr_p["id"]).execute()
+                            st.warning("PPE record removed successfully!")
+                            st.rerun()
+                else:
+                    st.info("No PPE records available to edit.")
+
+            with tab_ppe_req:
+                ppe_reqs = supabase.table("ppe_records").select("*").eq("status", "PENDING_ADMIN").order("created_at", desc=True).execute().data or []
+                if ppe_reqs:
+                    for req in ppe_reqs:
+                        req_emp = emp_obj_lookup.get(req.get("employee_id"), {})
+                        e_name = ent_name_lookup.get(req_emp.get("entity_id"), "N/A")
+                        c_name = cli_name_lookup.get(req_emp.get("client_id"), "N/A")
+
+                        st.markdown(f"""
+                        <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 5px solid #0284C7; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
+                            <b>Employee:</b> {req_emp.get('full_name', 'N/A')} (<b>Code:</b> {req_emp.get('employee_code', 'N/A')}) | <b>Designation:</b> {req_emp.get('designation', 'Staff')}<br/>
+                            <b>Entity:</b> {e_name} | <b>Client Site:</b> {c_name}<br/>
+                            <b>Requested Item:</b> <span style="color:#0284C7; font-weight:bold;">{req.get('item_type')}</span> | <b>Size:</b> {req.get('size')} | <b>Quantity:</b> {req.get('quantity')}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        col_r1, col_r2, _ = st.columns([1.5, 1.5, 5])
+                        if col_r1.button("Approve PPE", key=f"app_ppe_{req['id']}", type="primary"):
+                            supabase.table("ppe_records").update({"status": "APPROVED", "assigned_date": str(date.today())}).eq("id", req["id"]).execute()
+                            st.success(f"PPE Item approved for {req_emp.get('full_name')}!")
+                            st.rerun()
+
+                        if col_r2.button("Reject PPE", key=f"rej_ppe_{req['id']}"):
+                            supabase.table("ppe_records").update({"status": "REJECTED_BY_ADMIN"}).eq("id", req["id"]).execute()
+                            st.warning("PPE request rejected!")
+                            st.rerun()
+                else:
+                    st.info("No pending PPE requests.")
+
+            st.write("---")
+            st.write("#### Full PPE Tracker Records")
+            all_ppe_list = supabase.table("ppe_records").select("*").order("created_at", desc=True).execute().data or []
+            if all_ppe_list:
+                formatted_ppe_rows = []
+                for p_rec in all_ppe_list:
+                    emp_data_match = emp_obj_lookup.get(p_rec.get("employee_id"), {})
+                    formatted_ppe_rows.append({
+                        "Emp Code": emp_data_match.get("employee_code", "N/A"),
+                        "Employee Name": emp_data_match.get("full_name", "N/A"),
+                        "Firm / Entity": ent_name_lookup.get(emp_data_match.get("entity_id"), "N/A"),
+                        "Client Site": cli_name_lookup.get(emp_data_match.get("client_id"), "N/A"),
+                        "Item Type": p_rec.get("item_type"),
+                        "Size": p_rec.get("size"),
+                        "Quantity": p_rec.get("quantity"),
+                        "Status": p_rec.get("status"),
+                        "Assigned Date": p_rec.get("assigned_date") or str(p_rec.get("created_at"))[:10]
+                    })
+                st.dataframe(pd.DataFrame(formatted_ppe_rows), use_container_width=True)
+
+        # 10. Company & Plant Locations
+        elif selected_panel == "Company & Plant Locations":
+            loc1, loc2 = st.columns(2)
+            with loc1:
+                st.subheader("1. Entity / Firm Master")
+                t_ent_add, t_ent_edit = st.tabs(["Add Entity", "Edit / Delete Entity"])
+                with t_ent_add:
+                    with st.form("add_entity_portal_form"):
+                        en_name = st.text_input("Firm / Entity Name")
+                        en_addr = st.text_area("Registered Office Address")
+                        en_gst = st.text_input("GST Number")
+                        en_pref = st.text_input("Code Prefix (e.g. SE, GM)")
+                        en_pan = st.text_input("PAN Number")
+                        en_ph = st.text_input("Phone Number")
+                        en_em = st.text_input("Email ID")
+                        st.markdown("##### Bank Details for Invoices")
+                        en_bnk = st.text_input("Bank Name", value="SARASWAT BANK")
+                        en_acc = st.text_input("Account Number", value="610000000045918")
+                        en_ifsc = st.text_input("IFSC Code", value="SRCB0000376")
+                        
+                        if st.form_submit_button("Save Entity", type="primary"):
+                            if en_name and en_pref:
+                                supabase.table("entities").insert({
+                                    "name": en_name, "address": en_addr, "gst_number": en_gst, "code_prefix": en_pref,
+                                    "pan_number": en_pan, "phone": en_ph, "email": en_em,
+                                    "bank_name": en_bnk, "bank_account_no": en_acc, "ifsc_code": en_ifsc
+                                }).execute()
+                                st.cache_data.clear()
+                                st.success("Entity registered successfully!")
+                                st.rerun()
+
+                with t_ent_edit:
+                    ents_all = fetch_cached_entities()
+                    if ents_all:
+                        ent_select_map = {e["name"]: e for e in ents_all}
+                        sel_ent_e = st.selectbox("Select Entity to Edit/Delete", list(ent_select_map.keys()))
+                        curr_e = ent_select_map[sel_ent_e]
+                        with st.form("edit_entity_portal_form"):
+                            en_up_name = st.text_input("Firm Name", value=curr_e.get("name", ""))
+                            en_up_addr = st.text_area("Address", value=curr_e.get("address", ""))
+                            en_up_gst = st.text_input("GST", value=curr_e.get("gst_number", ""))
+                            en_up_pan = st.text_input("PAN", value=curr_e.get("pan_number", ""))
+                            en_up_bnk = st.text_input("Bank Name", value=curr_e.get("bank_name", "SARASWAT BANK"))
+                            en_up_acc = st.text_input("Bank Account No", value=curr_e.get("bank_account_no", "610000000045918"))
+                            en_up_ifsc = st.text_input("Bank IFSC Code", value=curr_e.get("ifsc_code", "SRCB0000376"))
+                            
+                            c1, c2 = st.columns(2)
+                            if c1.form_submit_button("Update Entity", type="primary"):
+                                update_payload = {
+                                    "name": en_up_name, 
+                                    "address": en_up_addr, 
+                                    "gst_number": en_up_gst,
+                                    "bank_name": en_up_bnk,
+                                    "bank_account_no": en_up_acc,
+                                    "ifsc_code": en_up_ifsc
+                                }
+                                if en_up_pan:
+                                    update_payload["pan_number"] = en_up_pan
+
+                                try:
+                                    supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
+                                    st.cache_data.clear()
+                                    st.success("Entity refreshed successfully!")
+                                    st.rerun()
+                                except Exception as e:
+                                    if "pan_number" in str(e):
+                                        update_payload.pop("pan_number", None)
+                                        supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
+                                        st.cache_data.clear()
+                                        st.success("Entity refreshed successfully!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error updating entity: {e}")
+
+                            if c2.form_submit_button("Delete Entity"):
+                                supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
+                                st.cache_data.clear()
+                                st.warning("Entity removed successfully!")
+                                st.rerun()
+
+            with loc2:
+                st.subheader("2. Client Plant Master & Geofence")
+                t_cli_add, t_cli_edit = st.tabs(["Add Client", "Edit / Delete Client"])
+                ents = fetch_cached_entities()
+                e_dict = {e["name"]: e["id"] for e in ents}
+
+                with t_cli_add:
+                    with st.form("add_client_portal_form"):
+                        cl_name = st.text_input("Client Company Name *")
+                        cl_code = st.text_input("Client Code *")
+                        cl_gst = st.text_input("Client GST Number *")
+                        cl_serv = st.number_input("Service Charge Rate (%) *", value=10.0, step=0.5)
+                        cl_full_addr = st.text_area("Plant Full Address")
+                        cl_c_name = st.text_input("Contact Person Name")
+                        cl_c_email = st.text_input("Contact Person Email")
+                        cl_c_mobile = st.text_input("Contact Person Mobile Number")
+                        assigned_ent = st.selectbox("Assign Entity Provider", options=list(e_dict.keys()) if e_dict else ["No Entity"])
+                        g_col1, g_col2 = st.columns(2)
+                        cl_lat = g_col1.number_input("Latitude", format="%.6f", value=18.651200)
+                        cl_lon = g_col2.number_input("Longitude", format="%.6f", value=73.805500)
+
+                        if st.form_submit_button("Save Client Details", type="primary"):
+                            if cl_name and cl_code:
+                                supabase.table("clients").insert({
+                                    "name": cl_name, "client_code": cl_code, "gst_number": cl_gst,
+                                    "service_charge_pct": cl_serv,
+                                    "plant_location": cl_full_addr, "contact_person_name": cl_c_name,
+                                    "contact_person_email": cl_c_email, "contact_person_mobile": cl_c_mobile,
+                                    "latitude": cl_lat, "longitude": cl_lon, "entity_id": e_dict.get(assigned_ent)
+                                }).execute()
+                                st.cache_data.clear()
+                                st.success("Client registered successfully!")
+                                st.rerun()
+
+                with t_cli_edit:
+                    clis_all = fetch_cached_clients()
+                    if clis_all:
+                        cli_select_map = {c["name"]: c for c in clis_all}
+                        sel_c_e = st.selectbox("Select Client to Edit/Delete", list(cli_select_map.keys()))
+                        curr_c = cli_select_map[sel_c_e]
+                        with st.form("edit_client_portal_form"):
+                            cl_up_name = st.text_input("Client Name", value=curr_c.get("name", ""))
+                            cl_up_gst = st.text_input("Client GST", value=curr_c.get("gst_number", ""))
+                            cl_up_serv = st.number_input("Service Charge Rate (%)", value=float(curr_c.get("service_charge_pct") or 10.0), step=0.5)
+                            cl_up_addr = st.text_area("Address", value=curr_c.get("plant_location", ""))
+                            cl_up_cn = st.text_input("Contact Person", value=curr_c.get("contact_person_name", ""))
+                            cl_up_ce = st.text_input("Email", value=curr_c.get("contact_person_email", ""))
+                            cl_up_cm = st.text_input("Mobile", value=curr_c.get("contact_person_mobile", ""))
+                            cg1, cg2 = st.columns(2)
+                            cl_up_lat = cg1.number_input("Latitude", format="%.6f", value=float(curr_c.get("latitude", 18.6512)))
+                            cl_up_lon = cg2.number_input("Longitude", format="%.6f", value=float(curr_c.get("longitude", 73.8055)))
+
+                            cb1, cb2 = st.columns(2)
+                            if cb1.form_submit_button("Update Client", type="primary"):
+                                supabase.table("clients").update({
+                                    "name": cl_up_name, "gst_number": cl_up_gst, "service_charge_pct": cl_up_serv,
+                                    "plant_location": cl_up_addr, "contact_person_name": cl_up_cn, 
+                                    "contact_person_email": cl_up_ce, "contact_person_mobile": cl_up_cm, 
+                                    "latitude": cl_up_lat, "longitude": cl_up_lon
+                                }).eq("id", curr_c["id"]).execute()
+                                st.cache_data.clear()
+                                st.success("Client details refreshed successfully!")
+                                st.rerun()
+                            if cb2.form_submit_button("Delete Client"):
+                                supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
+                                st.cache_data.clear()
+                                st.warning("Client removed successfully!")
+                                st.rerun()
+
+            st.write("---")
+            with st.expander("Configure Client-wise Paid Holidays (PH) for Entity"):
+                with st.form("add_ph_form"):
+                    ph_col1, ph_col2 = st.columns(2)
+                    sel_ph_ent = ph_col1.selectbox("Select Entity", list(e_dict.keys()) if e_dict else ["No Entity"])
+                    sel_ph_cli = ph_col2.selectbox("Select Client Site", list(cli_select_map.keys()) if 'cli_select_map' in locals() and cli_select_map else ["No Client"])
+
+                    ph_date = ph_col1.date_input("Holiday Date", value=date.today())
+                    ph_name = ph_col2.text_input("Holiday Name (e.g. Diwali, Independence Day)")
+
+                    if st.form_submit_button("Save Paid Holiday", type="primary"):
+                        if ph_name and e_dict:
+                            try:
+                                supabase.table("paid_holidays").insert({
+                                    "entity_id": e_dict[sel_ph_ent],
+                                    "client_id": cli_select_map[sel_ph_cli]["id"] if 'cli_select_map' in locals() and sel_ph_cli in cli_select_map else None,
+                                    "holiday_date": str(ph_date),
+                                    "holiday_name": ph_name
+                                }).execute()
+                                st.success(f"Paid Holiday '{ph_name}' added successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving PH: {e}")
 
         # 11. User Roles & Access
         elif selected_panel == "User Roles & Access":
-            st.subheader("User Roles & Access Control (Supervisor, Client & Admin Portal)")
-            t_u_add, t_u_edit = st.tabs(["➕ Create User Access", "✏️ Edit / Delete User Access"])
+            st.subheader("User Roles & Access Control")
+            t_u_add, t_u_edit = st.tabs(["Create User Access", "Edit / Delete User Access"])
             cli_re = fetch_cached_clients()
             ent_re = fetch_cached_entities()
             cli_m = {c["name"]: c["id"] for c in cli_re}
@@ -1847,35 +1822,26 @@ else:
                 with st.form("create_role_form"):
                     rc1, rc2, rc3 = st.columns(3)
                     new_r = rc1.selectbox("Role", ["supervisor", "client", "admin"])
-                    new_u = rc2.text_input("User ID / Login Code *")
+                    new_u = rc2.text_input("User ID *")
                     new_n = rc3.text_input("Full Name *")
                     new_p = rc1.text_input("Password *", type="password")
                     new_ph = rc2.text_input("Mobile Number *")
-                    new_email = rc3.text_input("Email ID")
-                    assigned_ent = rc1.selectbox("Assign Entity Provider *", options=list(ent_m.keys()) if ent_m else ["No Entity"])
-                    assigned_client = rc2.selectbox("Assign Client Site", options=list(cli_m.keys()) if cli_m else ["No Client"])
+                    assigned_ent = rc3.selectbox("Assign Entity Provider *", options=list(ent_m.keys()) if ent_m else ["No Entity"])
+                    assigned_client = rc1.selectbox("Assign Client Site", options=list(cli_m.keys()) if cli_m else ["No Client"])
 
                     if st.form_submit_button("Save User Credentials", type="primary"):
                         if not new_u or not new_n or not new_p or not new_ph:
-                            st.error("User ID, Full Name, Password, and Mobile Number are mandatory!")
+                            st.error("User ID, Full Name, Password and Mobile Number are required!")
                         else:
-                            try:
-                                supabase.table("employees").insert({
-                                    "user_id": new_u, 
-                                    "password": new_p, 
-                                    "full_name": new_n,
-                                    "phone_number": new_ph, 
-                                    "emergency_contact": new_email, # storing email in emergency contact or similar
-                                    "role": new_r, 
-                                    "entity_id": ent_m.get(assigned_ent),
-                                    "client_id": cli_m.get(assigned_client), 
-                                    "status": "APPROVED"
-                                }).execute()
-                                st.cache_data.clear()
-                                st.success(f"✅ Data Saved Successfully: New {new_r} login created for {new_n}!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error creating user access: {e}")
+                            supabase.table("employees").insert({
+                                "user_id": new_u, "password": new_p, "full_name": new_n,
+                                "phone_number": new_ph,
+                                "role": new_r, "entity_id": ent_m.get(assigned_ent),
+                                "client_id": cli_m.get(assigned_client), "status": "APPROVED"
+                            }).execute()
+                            st.cache_data.clear()
+                            st.success(f"New {new_r} login created for {new_n}!")
+                            st.rerun()
 
             with t_u_edit:
                 users_res = supabase.table("employees").select("*").in_("role", ["supervisor", "client", "admin"]).execute().data or []
@@ -1887,24 +1853,44 @@ else:
                         up_un = st.text_input("Full Name", value=curr_u.get("full_name", ""))
                         up_up = st.text_input("New Password", value=curr_u.get("password", ""))
                         up_ph = st.text_input("Mobile Number", value=curr_u.get("phone_number", ""))
-                        
                         uc1, uc2 = st.columns(2)
-                        if uc1.form_submit_button("Update User Access", type="primary"):
+                        if uc1.form_submit_button("Update User", type="primary"):
                             supabase.table("employees").update({
-                                "full_name": up_un, 
-                                "password": up_up,
-                                "phone_number": up_ph
+                                "full_name": up_un, "password": up_up, "phone_number": up_ph
                             }).eq("id", curr_u["id"]).execute()
                             st.cache_data.clear()
-                            st.success("✅ Data Updated Successfully: User credentials refreshed!")
+                            st.success("User updated successfully!")
                             st.rerun()
-                        if uc2.form_submit_button("🗑️ Delete User Access"):
+                        if uc2.form_submit_button("Delete User"):
                             supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
                             st.cache_data.clear()
-                            st.warning("🗑️ Data Deleted Successfully: User access revoked!")
+                            st.warning("User access revoked!")
                             st.rerun()
                 else:
-                    st.info("ℹ️ No supervisor or client accounts configured yet.")
+                    st.info("No user access accounts configured yet.")
+
+        # 12. Device Binding Reset
+        elif selected_panel == "Device Binding Reset":
+            st.subheader("Employee Mobile Device Binding & Reset Management")
+            st.info("Here Admin can reset the registered device ID for employees if they switch mobile phones.")
+            
+            all_bound_emps = supabase.table("employees").select("id, employee_code, full_name, phone_number, device_binding_id").eq("role", "employee").execute().data or []
+            if all_bound_emps:
+                emp_bind_map = {f"[{e.get('employee_code')}] {e['full_name']} (Phone: {e.get('phone_number')})": e for e in all_bound_emps}
+                sel_b_emp = st.selectbox("Select Employee to Reset Device Lock", list(emp_bind_map.keys()))
+                target_emp = emp_bind_map[sel_b_emp]
+                
+                st.write(f"**Current Bound Device ID:** `{target_emp.get('device_binding_id') or 'Not Bound / First Login Pending'}`")
+                
+                if st.button("Reset / Unlink Mobile Device Binding", type="primary"):
+                    try:
+                        supabase.table("employees").update({"device_binding_id": None}).eq("id", target_emp["id"]).execute()
+                        st.success(f"Device binding successfully reset for {target_emp['full_name']}! Now they can login from a new phone.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error resetting device binding: {e}")
+            else:
+                st.info("No employee records found.")
 
     # -------------------------------------------------------------------------
     # 4.2 SUPERVISOR PORTAL
@@ -1914,8 +1900,8 @@ else:
             st.session_state.active_sup_tab = "Candidate Verification"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">🛡️ Supervisor Desk</div>', unsafe_allow_html=True)
-            st.markdown('<div class="logged-badge">● Logged In: SUPERVISOR</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS SUPERVISOR</div>', unsafe_allow_html=True)
+            st.markdown('<div class="logged-badge">Logged In: SUPERVISOR</div>', unsafe_allow_html=True)
             st.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
             st.caption("SUPERVISOR DESK")
 
@@ -1933,7 +1919,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="sup_logout"):
+            if st.button("Logout", key="sup_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -1942,7 +1928,7 @@ else:
         st.title(selected_sup_panel)
 
         if selected_sup_panel == "Candidate Verification":
-            st.subheader("New Joinee Verification & Deployment Setup / कामगार प्राथमिक पडताळणी")
+            st.subheader("New Joinee Verification & Deployment Setup")
             cand_list = supabase.table("employees").select("*").eq("status", "PENDING_SUPERVISOR").execute().data or []
             
             ent_list = fetch_cached_entities()
@@ -1952,21 +1938,21 @@ else:
 
             if cand_list:
                 for c in cand_list:
-                    with st.expander(f"📋 Applicant: {c['full_name']} (Mobile: {c['phone_number']}) | DOB: {c.get('dob')} | Gender: {c.get('gender')}"):
+                    with st.expander(f"Applicant: {c['full_name']} (Mobile: {c['phone_number']}) | DOB: {c.get('dob')} | Gender: {c.get('gender')}"):
                         v_col1, v_col2 = st.columns(2)
                         
-                        s_ent = v_col1.selectbox("Assign Entity Provider / फर्म निवडा *", list(e_dict.keys()) if e_dict else ["No Entity"], key=f"sup_ent_{c['id']}")
-                        s_cli = v_col2.selectbox("Assign Client Work Site / प्लांट लोकेशन *", list(c_dict.keys()) if c_dict else ["No Client"], key=f"sup_cli_{c['id']}")
+                        s_ent = v_col1.selectbox("Assign Entity Provider *", list(e_dict.keys()) if e_dict else ["No Entity"], key=f"sup_ent_{c['id']}")
+                        s_cli = v_col2.selectbox("Assign Client Work Site *", list(c_dict.keys()) if c_dict else ["No Client"], key=f"sup_cli_{c['id']}")
 
-                        s_desig = v_col1.text_input("Assign Designation / पद निवडा *", value=c.get("designation") or "Associate", key=f"desig_{c['id']}")
-                        s_shift = v_col2.selectbox("Assign Shift Schedule / शिफ्ट वेळ *", STANDARD_SHIFTS, key=f"shift_{c['id']}")
+                        s_desig = v_col1.text_input("Assign Designation *", value=c.get("designation") or "Associate", key=f"desig_{c['id']}")
+                        s_shift = v_col2.selectbox("Assign Shift Schedule *", STANDARD_SHIFTS, key=f"shift_{c['id']}")
 
-                        s_join_date = v_col1.date_input("Assign Joining Date / कामावर रुजू होण्याची तारीख *", value=date.today(), key=f"join_{c['id']}")
-                        s_wo = v_col2.selectbox("Assign Weekly Off Day / आठवडी सुट्टीचा वार *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0, key=f"wo_{c['id']}")
+                        s_join_date = v_col1.date_input("Assign Joining Date *", value=date.today(), key=f"join_{c['id']}")
+                        s_wo = v_col2.selectbox("Assign Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0, key=f"wo_{c['id']}")
 
                         st.write("---")
                         col_act1, col_act2 = st.columns([2, 5])
-                        if col_act1.button("✅ Verify & Forward to Admin", key=f"fwd_{c['id']}", type="primary"):
+                        if col_act1.button("Verify & Forward to Admin", key=f"fwd_{c['id']}", type="primary"):
                             try:
                                 supabase.table("employees").update({
                                     "entity_id": e_dict.get(s_ent),
@@ -1978,16 +1964,16 @@ else:
                                     "status": "PENDING_ADMIN"
                                 }).eq("id", c["id"]).execute()
                                 st.cache_data.clear()
-                                st.success("✅ Application Verified & Forwarded to Admin! / अर्ज तपासून ॲडमिनकडे मंजुरीसाठी पाठवला आहे.")
+                                st.success("Application Verified & Forwarded to Admin!")
                                 st.rerun()
                             except Exception as err:
                                 st.error(f"Error forwarding candidate: {err}")
             else:
-                st.info("ℹ️ No candidates pending supervisor verification. / सुपरवायझर पडताळणीसाठी कोणताही अर्ज प्रलंबित नाही.")
+                st.info("No candidates pending supervisor verification.")
 
         elif selected_sup_panel == "PPE & Advance Approvals":
             st.subheader("Supervisor Review: PPE & Advance Salary Requests")
-            t_sup_ppe, t_sup_adv = st.tabs(["🦺 PPE Requests", "💰 Advance Requests"])
+            t_sup_ppe, t_sup_adv = st.tabs(["PPE Requests", "Advance Requests"])
 
             all_emps_data = fetch_cached_employees()
             emp_map = {e["id"]: e for e in all_emps_data}
@@ -2007,16 +1993,16 @@ else:
                         </div>
                         """, unsafe_allow_html=True)
                         col1, col2, _ = st.columns([1.5, 1.5, 5])
-                        if col1.button("✅ Forward to Admin", key=f"sup_app_ppe_{req['id']}", type="primary"):
+                        if col1.button("Forward to Admin", key=f"sup_app_ppe_{req['id']}", type="primary"):
                             supabase.table("ppe_records").update({"status": "PENDING_ADMIN"}).eq("id", req["id"]).execute()
                             st.success("Verified and forwarded to Admin!")
                             st.rerun()
-                        if col2.button("❌ Reject", key=f"sup_rej_ppe_{req['id']}"):
+                        if col2.button("Reject", key=f"sup_rej_ppe_{req['id']}"):
                             supabase.table("ppe_records").update({"status": "REJECTED_BY_SUPERVISOR"}).eq("id", req["id"]).execute()
                             st.warning("Rejected!")
                             st.rerun()
                 else:
-                    st.info("ℹ️ No PPE requests pending supervisor review.")
+                    st.info("No PPE requests pending supervisor review.")
 
             with t_sup_adv:
                 adv_pending = supabase.table("advance_salaries").select("*").eq("status", "PENDING_SUPERVISOR").order("created_at", desc=True).execute().data or []
@@ -2027,27 +2013,27 @@ else:
                         <div style="background-color: #F8FAFC; border: 1px solid #CBD5E1; border-left: 5px solid #F59E0B; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
                             <b>Employee:</b> {req_emp.get('full_name')} (<b>Code:</b> {req_emp.get('employee_code')}) | <b>Designation:</b> {req_emp.get('designation')}<br/>
                             <b>Firm / Entity:</b> {ent_map.get(req_emp.get('entity_id'), 'N/A')} | <b>Client Work Site:</b> {cli_map.get(req_emp.get('client_id'), 'N/A')}<br/>
-                            <b>Requested Amount:</b> ₹{float(req.get('amount', 0)):,.2f} | <b>Reason:</b> {req.get('reason')}
+                            <b>Requested Amount:</b> Rs. {float(req.get('amount', 0)):,.2f} | <b>Reason:</b> {req.get('reason')}
                         </div>
                         """, unsafe_allow_html=True)
                         col1, col2, _ = st.columns([1.5, 1.5, 5])
-                        if col1.button("✅ Forward to Admin", key=f"sup_app_adv_{req['id']}", type="primary"):
+                        if col1.button("Forward to Admin", key=f"sup_app_adv_{req['id']}", type="primary"):
                             supabase.table("advance_salaries").update({"status": "PENDING_ADMIN"}).eq("id", req["id"]).execute()
                             st.success("Verified and forwarded to Admin!")
                             st.rerun()
-                        if col2.button("❌ Reject", key=f"sup_rej_adv_{req['id']}"):
+                        if col2.button("Reject", key=f"sup_rej_adv_{req['id']}"):
                             supabase.table("advance_salaries").update({"status": "REJECTED_BY_SUPERVISOR"}).eq("id", req["id"]).execute()
                             st.warning("Rejected!")
                             st.rerun()
                 else:
-                    st.info("ℹ️ No advance requests pending supervisor review.")
+                    st.info("No advance requests pending supervisor review.")
 
         elif selected_sup_panel == "Site Attendance & Punch":
             st.subheader("Live Plant Attendance Review")
             st.info("Worker punches are geo-fenced against assigned plant coordinates.")
 
         elif selected_sup_panel == "Workforce Roster":
-            st.subheader("Supervised Workforce Roster / कामगार यादी")
+            st.subheader("Supervised Workforce Roster")
             try:
                 emps = supabase.table("employees").select("employee_code, full_name, designation, phone_number, status, weekly_off_day").eq("role", "employee").execute().data or []
             except Exception:
@@ -2056,7 +2042,7 @@ else:
             if emps:
                 st.dataframe(pd.DataFrame(emps), use_container_width=True)
             else:
-                st.info("ℹ️ No active workforce found in roster.")
+                st.info("No active workforce found.")
 
     # -------------------------------------------------------------------------
     # 4.3 CLIENT DESK
@@ -2066,8 +2052,8 @@ else:
             st.session_state.active_client_tab = "Plant Workforce Overview"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">🏢 Client Portal</div>', unsafe_allow_html=True)
-            st.markdown('<div class="logged-badge">● Logged In: CLIENT DESK</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS CLIENT</div>', unsafe_allow_html=True)
+            st.markdown('<div class="logged-badge">Logged In: CLIENT DESK</div>', unsafe_allow_html=True)
             st.write(f"Authorized Rep: **{st.session_state.user.get('full_name')}**")
             st.caption("CLIENT PORTAL")
 
@@ -2085,7 +2071,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="cli_logout"):
+            if st.button("Logout", key="cli_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -2103,8 +2089,6 @@ else:
             emps = supabase.table("employees").select("employee_code, full_name, designation, shift_hours").eq("role", "employee").eq("status", "APPROVED").execute().data or []
             if emps:
                 st.dataframe(pd.DataFrame(emps), use_container_width=True)
-            else:
-                st.info("ℹ️ No active workforce deployed on site.")
 
         elif selected_client_panel == "Daily Attendance Muster":
             st.subheader("Daily Attendance Records")
@@ -2112,7 +2096,7 @@ else:
             if att_data:
                 st.dataframe(pd.DataFrame(att_data), use_container_width=True)
             else:
-                st.info("ℹ️ No attendance records logged yet.")
+                st.info("No attendance records logged yet.")
 
         elif selected_client_panel == "Monthly Invoices & Billing":
             st.subheader("Monthly Tax Invoices")
@@ -2120,14 +2104,14 @@ else:
             if inv_list:
                 st.dataframe(pd.DataFrame(inv_list), use_container_width=True)
             else:
-                st.info("ℹ️ No invoices raised for this site yet.")
+                st.info("No invoices raised for this site yet.")
 
         elif selected_client_panel == "Compliance & Wage Sheets":
             st.subheader("Statutory Compliance & Locked Wage Sheets")
             st.info("Wage sheets locked by Admin on 1st of every month are verified for compliance.")
 
     # -------------------------------------------------------------------------
-    # 4.4 EMPLOYEE PORTAL (With Password Change Facility)
+    # 4.4 EMPLOYEE PORTAL (Direct Punch Window on Re-Login)
     # -------------------------------------------------------------------------
     elif active_role == "employee":
         emp = st.session_state.user
@@ -2136,23 +2120,23 @@ else:
         today_str = str(today_date)
 
         if "active_emp_tab" not in st.session_state:
-            st.session_state.active_emp_tab = "⏱️ Daily Punch"
+            st.session_state.active_emp_tab = "Daily Punch (Geofenced)"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">📱 ESS Employee Portal</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="logged-badge">● Logged In: ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">ESS PORTAL</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="logged-badge">Logged In: EMPLOYEE ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
             st.write(f"User: **{emp.get('full_name')}**")
             st.caption("ESS PORTAL")
 
             emp_tabs = [
-                "⏱️ Daily Punch",
-                "👤 My Profile",
-                "📅 Attendance",
-                "📄 Payslips",
-                "📁 Documents",
-                "🦺 Request PPE",
-                "💰 Request Advance",
-                "🔒 Change Password"
+                "Daily Punch (Geofenced)",
+                "My Profile Details",
+                "Attendance Calendar",
+                "Monthly Payslips (15th)",
+                "Official Documents Vault",
+                "Request PPE Equipment",
+                "Request Salary Advance",
+                "Change Password"
             ]
 
             for ep_tab in emp_tabs:
@@ -2162,7 +2146,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="emp_logout"):
+            if st.button("Logout", key="emp_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -2170,8 +2154,8 @@ else:
         selected_emp_panel = st.session_state.active_emp_tab
         st.title(selected_emp_panel)
 
-        # 1. PUNCH PANEL
-        if selected_emp_panel == "⏱️ Daily Punch":
+        # 1. PUNCH PANEL (Strict 15m Geofence)
+        if selected_emp_panel == "Daily Punch (Geofenced)":
             st.subheader("Daily Attendance Punch")
 
             assigned_lat = None
@@ -2191,7 +2175,7 @@ else:
                     st.error(f"Client location fetch error: {err}")
 
             if assigned_lat is None or assigned_lon is None:
-                st.warning("⚠️ Tumchya profile la ajun authorized Client Work Site jodhli nahiye kinva Client che GPS location set kelele nahi. Krupaya Admin shi sampark kara.")
+                st.warning("Client Work Site is not assigned to your profile or location is missing. Please contact Admin.")
                 st.stop()
 
             scheduled_shift_hours = float(emp.get("shift_hours") or 8.5)
@@ -2233,16 +2217,17 @@ else:
             raw_dev_lon = st.query_params.get("device_lon")
 
             st.markdown('<div class="submit-red-btn" style="max-width: 320px;">', unsafe_allow_html=True)
-            punch_pressed = st.button("👍 Thumb Punch In / Out", key="strict_thumb_punch_btn")
+            punch_pressed = st.button("Thumb Punch In / Out", key="strict_thumb_punch_btn")
             st.markdown('</div>', unsafe_allow_html=True)
 
             if punch_pressed:
                 if not raw_dev_lat or not raw_dev_lon:
-                    st.error("❌ GPS Location Required: Krupaya tumchya browser madhye Location (GPS) ON kara ani Allow kara!")
+                    st.error("GPS Location Required: Please allow browser location (GPS) permissions and retry.")
                 else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
+                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2252,7 +2237,8 @@ else:
                     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
                     dist = R * c
 
-                    is_valid_location = dist <= 50.0
+                    # Strict 15 Meters Geofence Validation
+                    is_valid_location = dist <= 15.0
 
                     if is_valid_location:
                         now_time = datetime.now()
@@ -2270,7 +2256,7 @@ else:
                                     "ot_hours": 0.0,
                                     "is_valid_geo": True
                                 }, on_conflict="employee_id,date").execute()
-                                st.success(f"✅ Punch IN Recorded at {display_time}! Shift suru jhali.")
+                                st.success(f"Punch IN Recorded at {display_time}!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error logging Punch IN: {e}")
@@ -2282,12 +2268,12 @@ else:
                                     "status": "IN_PROGRESS",
                                     "is_valid_geo": True
                                 }).eq("id", record["id"]).execute()
-                                st.success(f"✅ Punch OUT Updated at {display_time}! Purn shift che timing udya final evaluate hoil.")
+                                st.success(f"Punch OUT Updated at {display_time}!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error updating Punch OUT: {e}")
                     else:
-                        st.error("❌ Invalid Location! Tumhi authorized plant chya baher ahat. Punch sweekarla janar nahi.")
+                        st.error(f"Invalid Location! You are outside authorized plant boundary (Distance: {dist:.1f} meters). Punch allowed only within 15 meters.")
 
             if att_check:
                 today_rec = att_check[0]
@@ -2303,63 +2289,61 @@ else:
                 p_in_disp = format_display_time(today_rec.get("punch_in"))
                 p_out_disp = format_display_time(today_rec.get("punch_out")) if today_rec.get("punch_out") else "Working (Pending Punch OUT)"
                 st.write("")
-                st.info(f"📋 **Today's Activity:** Status: **Shift Ongoing** | **Punch IN:** `{p_in_disp}` | **Last Punch OUT:** `{p_out_disp}`")
+                st.info(f"Today's Activity: Status: Shift Ongoing | Punch IN: {p_in_disp} | Last Punch OUT: {p_out_disp}")
 
         # 2. PROFILE DETAILS PANEL
-        elif selected_emp_panel == "👤 My Profile":
-            st.subheader("Personal, Employment & Statutory Profile / वैयक्तिक आणि रोजगाराची माहिती")
+        elif selected_emp_panel == "My Profile Details":
+            st.subheader("Personal, Employment & Statutory Profile")
 
-            cl_name = "Not Assigned / नियुक्त नाही"
+            cl_name = "Not Assigned"
             if emp.get("client_id"):
                 try:
                     cl_info = supabase.table("clients").select("name").eq("id", emp["client_id"]).execute().data
                     if cl_info: cl_name = cl_info[0].get("name")
                 except Exception: pass
 
-            aadhar_val = str(emp.get("aadhar_number") or "")
-
             p_col1, p_col2 = st.columns(2)
             with p_col1:
                 st.markdown(f"""
                 <div class="profile-card">
-                    <h4 style="margin-top:0; color:#0F172A;">👤 Personal & Employment / वैयक्तिक तपशील</h4>
-                    <b>Full Name / पूर्ण नाव:</b> {emp.get('full_name')}<br/>
-                    <b>Employee Code / कर्मचारी कोड:</b> {emp.get('employee_code', 'TEMP')}<br/>
-                    <b>Father's Name / वडिलांचे नाव:</b> {emp.get('father_name', 'N/A')}<br/>
+                    <h4 style="margin-top:0; color:#0F172A;">Personal & Employment Details</h4>
+                    <b>Full Name:</b> {emp.get('full_name')}<br/>
+                    <b>Employee Code:</b> {emp.get('employee_code', 'TEMP')}<br/>
+                    <b>Father's Name:</b> {emp.get('father_name', 'N/A')}<br/>
                     <b>Gender:</b> {emp.get('gender', 'N/A')} | <b>DOB:</b> {emp.get('dob', 'N/A')}<br/>
-                    <b>Mobile Number / मोबाईल:</b> {emp.get('phone_number')}<br/>
-                    <b>Emergency Contact / आपत्कालीन संपर्क:</b> {emp.get('emergency_contact', 'N/A')}<br/>
-                    <b>Designation / पद:</b> {emp.get('designation', 'Associate')}<br/>
-                    <b>Client Site / कंपनी लोकेशन:</b> {cl_name}<br/>
+                    <b>Mobile Number:</b> {emp.get('phone_number')}<br/>
+                    <b>Emergency Contact:</b> {emp.get('emergency_contact', 'N/A')}<br/>
+                    <b>Designation:</b> {emp.get('designation', 'Associate')}<br/>
+                    <b>Client Site:</b> {cl_name}<br/>
                     <b>Weekly Off Day:</b> {emp.get('weekly_off_day', 'Sunday')}<br/>
-                    <b>Marital Status / वैवाहिक स्थिती:</b> {emp.get('marital_status', 'Single')}
+                    <b>Marital Status:</b> {emp.get('marital_status', 'Single')}
                 </div>
                 """, unsafe_allow_html=True)
 
             with p_col2:
                 st.markdown(f"""
                 <div class="profile-card">
-                    <h4 style="margin-top:0; color:#0F172A;">🪪 Statutory & Bank / बँक व कायदेशीर तपशील</h4>
-                    <b>UAN Number / यूएएन:</b> {emp.get('uan_number', 'N/A')}<br/>
-                    <b>ESIC Number / ईएसआयसी:</b> {emp.get('esic_number', 'N/A')}<br/>
-                    <b>PAN Number / पॅन:</b> {emp.get('pan_number', 'N/A')}<br/>
-                    <b>Aadhaar Number / आधार क्रमांक:</b> {aadhar_val}<br/>
-                    <b>Bank Name / बँकेचे नाव:</b> {emp.get('bank_name', 'N/A')} ({emp.get('bank_branch', 'Main')})<br/>
-                    <b>Account No / खाते क्रमांक:</b> {emp.get('bank_account_no', 'N/A')}<br/>
-                    <b>IFSC Code / आयएफएससी:</b> {emp.get('ifsc_code', 'N/A')}
+                    <h4 style="margin-top:0; color:#0F172A;">Statutory & Bank Details</h4>
+                    <b>UAN Number:</b> {emp.get('uan_number', 'N/A')}<br/>
+                    <b>ESIC Number:</b> {emp.get('esic_number', 'N/A')}<br/>
+                    <b>PAN Number:</b> {emp.get('pan_number', 'N/A')}<br/>
+                    <b>Aadhaar Number:</b> [Aadhaar Redacted]<br/>
+                    <b>Bank Name:</b> {emp.get('bank_name', 'N/A')} ({emp.get('bank_branch', 'Main')})<br/>
+                    <b>Account No:</b> {emp.get('bank_account_no', 'N/A')}<br/>
+                    <b>IFSC Code:</b> {emp.get('ifsc_code', 'N/A')}
                 </div>
                 """, unsafe_allow_html=True)
 
             st.write("---")
-            st.subheader("✏️ Update Bank Details (Auto-Synced with Admin) / बँक तपशील अपडेट करा")
+            st.subheader("Update Bank Details (Auto-Synced with Admin)")
             with st.form("emp_update_bank_form"):
                 b1, b2 = st.columns(2)
-                up_bank_name = b1.text_input("Bank Name / बँकेचे नाव", value=emp.get("bank_name", ""))
-                up_bank_branch = b2.text_input("Branch Name / शाखेचे नाव", value=emp.get("bank_branch", ""))
-                up_acc_no = b1.text_input("Account Number / खाते क्रमांक", value=emp.get("bank_account_no", ""))
-                up_ifsc = b2.text_input("IFSC Code / आयएफएससी कोड", value=emp.get("ifsc_code", ""))
+                up_bank_name = b1.text_input("Bank Name", value=emp.get("bank_name", ""))
+                up_bank_branch = b2.text_input("Branch Name", value=emp.get("bank_branch", ""))
+                up_acc_no = b1.text_input("Account Number", value=emp.get("bank_account_no", ""))
+                up_ifsc = b2.text_input("IFSC Code", value=emp.get("ifsc_code", ""))
 
-                if st.form_submit_button("Update Bank Details / बँक माहिती अपडेट करा", type="primary"):
+                if st.form_submit_button("Update Bank Details", type="primary"):
                     if up_bank_name and up_acc_no and up_ifsc:
                         try:
                             supabase.table("employees").update({
@@ -2373,7 +2357,7 @@ else:
                             st.session_state.user["bank_account_no"] = up_acc_no
                             st.session_state.user["ifsc_code"] = up_ifsc
                             st.cache_data.clear()
-                            st.success("✅ Data Updated Successfully! Bank details synchronized with Admin portal.")
+                            st.success("Bank details synchronized with Admin portal successfully!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error: {e}")
@@ -2381,24 +2365,14 @@ else:
                         st.error("Bank Name, Account Number and IFSC Code are required!")
 
         # 3. ATTENDANCE PANEL
-        elif selected_emp_panel == "📅 Attendance":
-            st.subheader("My Attendance Muster & Calendar / माझी उपस्थिती नोंदवही")
+        elif selected_emp_panel == "Attendance Calendar":
+            st.subheader("My Attendance Muster & Calendar")
             t_day, t_month, t_year, t_ph = st.tabs([
-                "📅 Daily View",
-                "🗓️ Monthly Summary",
-                "📈 Annual Muster",
-                "🎉 Paid Holidays"
+                "Daily View",
+                "Monthly Summary",
+                "Annual Muster",
+                "Paid Holidays"
             ])
-
-            st.markdown("""
-            <div style="display:flex; gap:12px; margin-bottom:15px; font-weight:600; font-size:12px;">
-                <span style="background-color:#16A34A; color:white; padding:3px 8px; border-radius:4px;">P : Present / हजर</span>
-                <span style="background-color:#F59E0B; color:white; padding:3px 8px; border-radius:4px;">HD : Half Day / अर्धा दिवस</span>
-                <span style="background-color:#DC2626; color:white; padding:3px 8px; border-radius:4px;">A : Absent / गैरहजर</span>
-                <span style="background-color:#9333EA; color:white; padding:3px 8px; border-radius:4px;">PH : Paid Holiday / सवेतन सुट्टी</span>
-                <span style="background-color:#6B7280; color:white; padding:3px 8px; border-radius:4px;">WO : Weekly Off / साप्ताहिक सुट्टी</span>
-            </div>
-            """, unsafe_allow_html=True)
 
             my_att = []
             try:
@@ -2432,19 +2406,19 @@ else:
             emp_wo_day = emp.get("weekly_off_day", "Sunday")
 
             with t_day:
-                st.markdown("##### 📅 Single Day Attendance Details / एका दिवसाचा उपस्थिती तपशील")
-                sel_day = st.date_input("Select Date / तारीख निवडा", value=today_date)
+                st.markdown("##### Single Day Attendance Details")
+                sel_day = st.date_input("Select Date", value=today_date)
                 sel_day_str = str(sel_day)
 
-                badge_title = "ABSENT / गैरहजर"
+                badge_title = "ABSENT"
                 badge_bg = "#EF4444"
                 p_in_time = "--:--"
                 p_out_time = "--:--"
                 ot_time = "0.0 Hrs"
-                info_msg = "No work activity recorded on this date. / या तारखेला कामाची नोंद नाही."
+                info_msg = "No work activity recorded on this date."
 
                 if sel_day_str in ph_dates:
-                    badge_title = "PAID HOLIDAY / सवेतन सुट्टी"
+                    badge_title = "PAID HOLIDAY"
                     badge_bg = "#9333EA"
                     info_msg = f"Public / Client Holiday: {ph_dates[sel_day_str]}"
                 elif sel_day.strftime("%A") == emp_wo_day:
@@ -2452,7 +2426,7 @@ else:
                     badge_bg = "#64748B"
                     info_msg = f"Scheduled Weekly Off ({emp_wo_day})"
                 elif sel_day == today_date:
-                    badge_title = "SHIFT IN PROGRESS / शिफ्ट सुरू आहे"
+                    badge_title = "SHIFT IN PROGRESS"
                     badge_bg = "#0284C7"
                     if sel_day_str in att_dict:
                         rec = att_dict[sel_day_str]
@@ -2470,22 +2444,22 @@ else:
                     ot_time = f"{rec.get('ot_hours', 0.0)} Hrs"
 
                     if st_val == "P":
-                        badge_title = "PRESENT (FULL DAY) / पूर्ण दिवस हजर"
+                        badge_title = "PRESENT (FULL DAY)"
                         badge_bg = "#10B981"
                         info_msg = "Shift duration completed successfully."
                     elif st_val == "HD":
-                        badge_title = "HALF DAY / अर्धा दिवस"
+                        badge_title = "HALF DAY"
                         badge_bg = "#F59E0B"
                         info_msg = "Left early / Half-day criteria met."
                     else:
-                        badge_title = "ABSENT / LWP / गैरहजर"
+                        badge_title = "ABSENT / LWP"
                         badge_bg = "#EF4444"
                         info_msg = "Insufficient shift hours completed."
 
                 st.markdown(f"""
                 <div style="background-color: white; border: 1px solid #E2E8F0; border-left: 6px solid {badge_bg}; border-radius: 8px; padding: 20px; max-width: 650px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-top: 10px; margin-bottom: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <span style="font-size: 15px; font-weight: 700; color: #1E293B;">Date / तारीख: {sel_day.strftime('%d %B %Y')}</span>
+                        <span style="font-size: 15px; font-weight: 700; color: #1E293B;">Date: {sel_day.strftime('%d %B %Y')}</span>
                         <span style="background-color: {badge_bg}; color: white; padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 12px; letter-spacing: 0.5px;">{badge_title}</span>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; background-color: #F8FAFC; border-radius: 6px; padding: 12px; margin-bottom: 12px; border: 1px solid #F1F5F9;">
@@ -2502,7 +2476,7 @@ else:
                             <span style="font-size: 16px; font-weight: 700; color: #0F172A;">{ot_time}</span>
                         </div>
                     </div>
-                    <p style="margin: 0; font-size: 13px; color: #475569;">ℹ️ {info_msg}</p>
+                    <p style="margin: 0; font-size: 13px; color: #475569;">{info_msg}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -2525,7 +2499,7 @@ else:
                         remark = f"Weekly Off ({emp_wo_day})"
                     elif d_obj == today_date:
                         day_st = "IN_PROGRESS"
-                        remark = "Shift In Progress (Pending Final Hours)"
+                        remark = "Shift In Progress"
                     elif d_str in att_dict:
                         rec = att_dict[d_str]
                         p_in_raw = rec.get("punch_in")
@@ -2549,18 +2523,18 @@ else:
                                 remark = f"Present ({worked} hrs) | OT: {ot_val} hrs"
                             elif worked >= (shift_req / 2.0):
                                 day_st = "HD"
-                                remark = f"Half Day ({worked} hrs - Left Early)"
+                                remark = f"Half Day ({worked} hrs)"
                             else:
                                 day_st = "A"
-                                remark = f"Absent / LWP (Only {worked} hrs worked)"
+                                remark = f"Absent / LWP ({worked} hrs worked)"
                         else:
                             day_st = "A"
                             remark = "Absent / LWP (Missed Punch Out)"
                     else:
                         day_st = "A" if d_obj < today_date else "-"
-                        remark = "Absent (No Punch)" if day_st == "A" else "Upcoming"
+                        remark = "Absent" if day_st == "A" else "Upcoming"
 
-                    month_rows.append({"Date": d_str, "Day": d_obj.strftime("%A"), "Status": day_st, "Details & Working Hours": remark})
+                    month_rows.append({"Date": d_str, "Day": d_obj.strftime("%A"), "Status": day_st, "Details": remark})
 
                 st.dataframe(pd.DataFrame(month_rows), use_container_width=True)
 
@@ -2601,32 +2575,32 @@ else:
                     """, unsafe_allow_html=True)
 
             with t_ph:
-                st.write("##### Annual Client Paid Holidays (12 Mandatory PH)")
+                st.write("##### Annual Client Paid Holidays")
                 if ph_records:
                     st.dataframe(pd.DataFrame(ph_records)[["holiday_date", "holiday_name"]], use_container_width=True)
                 else:
                     st_holidays = [
-                        {"Date": "2026-01-26", "Holiday Name": "Republic Day / प्रजासत्ताक दिन"},
-                        {"Date": "2026-02-19", "Holiday Name": "Chhatrapati Shivaji Maharaj Jayanti / शिवजयंती"},
-                        {"Date": "2026-03-03", "Holiday Name": "Holi (Dhulivandan) / होळी (धुलिवंदन)"},
-                        {"Date": "2026-04-14", "Holiday Name": "Dr. Babasaheb Ambedkar Jayanti / आंबेडकर जयंती"},
-                        {"Date": "2026-05-01", "Holiday Name": "Maharashtra Day / कामगार दिन"},
-                        {"Date": "2026-08-15", "Holiday Name": "Independence Day / स्वातंत्र्य दिन"},
-                        {"Date": "2026-09-04", "Holiday Name": "Ganesh Chaturthi / गणेश चतुर्थी"},
-                        {"Date": "2026-10-02", "Holiday Name": "Mahatma Gandhi Jayanti / गांधी जयंती"},
-                        {"Date": "2026-10-20", "Holiday Name": "Dussehra (Vijayadashami) / दसरा (विजयादशमी)"},
-                        {"Date": "2026-11-09", "Holiday Name": "Diwali (Laxmi Pujan) / दिवाळी (लक्ष्मीपूजन)"},
-                        {"Date": "2026-11-10", "Holiday Name": "Diwali (Balipratipada) / दिवाळी (बळीप्रतिपदा)"},
-                        {"Date": "2026-12-25", "Holiday Name": "Christmas / नाताळ"}
+                        {"Date": "2026-01-26", "Holiday Name": "Republic Day"},
+                        {"Date": "2026-02-19", "Holiday Name": "Chhatrapati Shivaji Maharaj Jayanti"},
+                        {"Date": "2026-03-03", "Holiday Name": "Holi (Dhulivandan)"},
+                        {"Date": "2026-04-14", "Holiday Name": "Dr. Babasaheb Ambedkar Jayanti"},
+                        {"Date": "2026-05-01", "Holiday Name": "Maharashtra Day"},
+                        {"Date": "2026-08-15", "Holiday Name": "Independence Day"},
+                        {"Date": "2026-09-04", "Holiday Name": "Ganesh Chaturthi"},
+                        {"Date": "2026-10-02", "Holiday Name": "Mahatma Gandhi Jayanti"},
+                        {"Date": "2026-10-20", "Holiday Name": "Dussehra"},
+                        {"Date": "2026-11-09", "Holiday Name": "Diwali (Laxmi Pujan)"},
+                        {"Date": "2026-11-10", "Holiday Name": "Diwali (Balipratipada)"},
+                        {"Date": "2026-12-25", "Holiday Name": "Christmas"}
                     ]
                     st.dataframe(pd.DataFrame(st_holidays), use_container_width=True)
 
         # 4. MONTHLY PAYSLIPS PANEL
-        elif selected_emp_panel == "📄 Payslips":
-            st.subheader("Month-Wise Salary Payslips / मासिक पगार स्लिप")
+        elif selected_emp_panel == "Monthly Payslips (15th)":
+            st.subheader("Month-Wise Salary Payslips")
             st.caption("Official payslips are generated on the 15th of every month following payroll closure.")
             
-            sel_m = st.selectbox("Select Payroll Month", ["September 2026", "October 2026", "August 2026"])
+            sel_m = st.selectbox("Select Payroll Month", ["September 2026", "August 2026", "July 2026"])
             
             is_sheet_locked = False
             try:
@@ -2637,29 +2611,17 @@ else:
                 is_sheet_locked = False
 
             if not is_sheet_locked:
-                st.warning(f"⏳ **{sel_m} ची वेज शीट अद्याप ॲडमिन पोर्टलवरून अंतिम (Lock) झालेली नाही.**\n\nमहिन्याची वेज शीट लॉक झाल्यानंतर आणि पुढील महिन्याच्या १५ तारखेला ही स्लिप येथे उपलब्ध होईल.")
+                st.warning(f"Wage Sheet for {sel_m} is not locked by Admin yet. It will be available once locked.")
             else:
                 ent_obj = next((e for e in fetch_cached_entities() if e["id"] == emp.get("entity_id")), None)
                 cli_name = next((c["name"] for c in fetch_cached_clients() if c["id"] == emp.get("client_id")), "Plant Site")
                 
-                sal_rule = None
-                try:
-                    sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id"))
-                    if emp.get("client_id"):
-                        sr_query = sr_query.eq("client_id", emp.get("client_id"))
-                    if emp.get("designation"):
-                        sr_query = sr_query.ilike("designation", emp.get("designation").strip())
-                    if emp.get("category"):
-                        sr_query = sr_query.eq("category", emp.get("category").strip())
-                    s_matched = sr_query.execute().data
-                    if s_matched:
-                        sal_rule = s_matched[0]
-                    else:
-                        fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
-                        if fallback_res:
-                            sal_rule = fallback_res[0]
-                except Exception:
-                    pass
+                sal_rule = get_exact_salary_rule(
+                    emp.get("entity_id"),
+                    emp.get("client_id"),
+                    emp.get("designation"),
+                    emp.get("category")
+                )
                 
                 b_pay = float(sal_rule.get("basic", 14010.0)) if sal_rule else 14010.0
                 d_pay = float(sal_rule.get("da", 2511.0)) if sal_rule else 2511.0
@@ -2712,15 +2674,15 @@ else:
                 payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
 
                 st.download_button(
-                    f"📥 Download Official Payslip ({sel_m})",
+                    f"Download Official Payslip ({sel_m})",
                     data=payslip_pdf_bytes,
                     file_name=f"Payslip_{sel_m.replace(' ', '_')}_{emp.get('employee_code')}.pdf",
                     mime="application/pdf"
                 )
 
         # 5. DOCUMENTS VAULT PANEL
-        elif selected_emp_panel == "📁 Documents":
-            st.subheader("Official Employment Documents / अधिकृत नोकरी कागदपत्रे")
+        elif selected_emp_panel == "Official Documents Vault":
+            st.subheader("Official Employment Documents")
             ent_obj = supabase.table("entities").select("*").eq("id", emp.get("entity_id")).execute().data
             ent_val = ent_obj[0] if ent_obj else None
 
@@ -2733,37 +2695,25 @@ else:
                 except Exception:
                     pass
 
-            sal_rule = None
-            try:
-                sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id"))
-                if emp.get("client_id"):
-                    sr_query = sr_query.eq("client_id", emp.get("client_id"))
-                if emp.get("designation"):
-                    sr_query = sr_query.ilike("designation", emp.get("designation").strip())
-                if emp.get("category"):
-                    sr_query = sr_query.eq("category", emp.get("category").strip())
-                s_matched = sr_query.execute().data
-                if s_matched:
-                    sal_rule = s_matched[0]
-                else:
-                    fallback_res = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id")).execute().data
-                    if fallback_res:
-                        sal_rule = fallback_res[0]
-            except Exception:
-                pass
+            sal_rule = get_exact_salary_rule(
+                emp.get("entity_id"),
+                emp.get("client_id"),
+                emp.get("designation"),
+                emp.get("category")
+            )
 
             d1, d2 = st.columns(2)
             with d1:
-                st.markdown("##### 📑 Official Offer Letter / अधिकृत ऑफर लेटर")
+                st.markdown("##### Official Offer Letter")
                 off_data = generate_official_offer_letter(emp, ent_val, assigned_client_name, sal_rule)
-                st.download_button("📥 Download Offer Letter (PDF)", data=off_data, file_name=f"Offer_{emp.get('employee_code')}.pdf", mime="application/pdf")
+                st.download_button("Download Offer Letter (PDF)", data=off_data, file_name=f"Offer_{emp.get('employee_code')}.pdf", mime="application/pdf")
             with d2:
-                st.markdown("##### 🪪 Statutory ESIC Card / ईएसआयसी कार्ड")
-                st.download_button("📥 Download ESIC Card (PDF)", data=b"ESIC Card Document", file_name=f"ESIC_{emp.get('employee_code')}.pdf", mime="application/pdf")
+                st.markdown("##### Statutory ESIC Card")
+                st.download_button("Download ESIC Card (PDF)", data=b"ESIC Card Document", file_name=f"ESIC_{emp.get('employee_code')}.pdf", mime="application/pdf")
 
         # 6. PPE REQUEST PANEL
-        elif selected_emp_panel == "🦺 Request PPE":
-            st.subheader("Request Safety Equipment / PPE / सुरक्षा साधनांची मागणी")
+        elif selected_emp_panel == "Request PPE Equipment":
+            st.subheader("Request Safety Equipment / PPE")
             
             emp_catalog = []
             try:
@@ -2774,7 +2724,7 @@ else:
             price_lookup = {item["item_name"]: float(item["price"]) for item in emp_catalog}
 
             if not price_lookup:
-                st.warning("⚠️ तुमच्या प्लांट लोकेशनसाठी ॲडमिनने अद्याप PPE दर निश्चित केलेले नाहीत. कृपया सुपरवायझरशी संपर्क साधा.")
+                st.warning("PPE catalog prices are not configured for your plant site yet. Please contact supervisor.")
             else:
                 with st.form("emp_ppe_standalone_form"):
                     p_item = st.selectbox("Safety Equipment Required", list(price_lookup.keys()))
@@ -2784,7 +2734,7 @@ else:
                     p_qty = st.number_input("Quantity", min_value=1, value=1)
                     total_calculated_cost = unit_price * p_qty
 
-                    st.info(f"💰 **प्रति नग किंमत:** ₹{unit_price:,.2f} | **एकूण कपात:** ₹{total_calculated_cost:,.2f} (सदर रक्कम आगामी सॅलरीतून वजा होईल)")
+                    st.info(f"Unit Price: Rs. {unit_price:,.2f} | Total Cost: Rs. {total_calculated_cost:,.2f}")
 
                     if st.form_submit_button("Submit PPE Request", type="primary"):
                         try:
@@ -2797,15 +2747,15 @@ else:
                                 "status": "PENDING_SUPERVISOR",
                                 "assigned_date": today_str
                             }).execute()
-                            st.success("✅ PPE मागणी सुपरवायझरकडे पाठवली आहे!")
+                            st.success("PPE request submitted to supervisor successfully!")
                         except Exception as e:
                             st.error(f"Error submitting PPE request: {e}")
 
         # 7. ADVANCE SALARY PANEL
-        elif selected_emp_panel == "💰 Request Advance":
-            st.subheader("Apply for Salary Advance or Loan / ॲडव्हान्स पगार अर्ज")
+        elif selected_emp_panel == "Request Salary Advance":
+            st.subheader("Apply for Salary Advance or Loan")
             with st.form("emp_adv_standalone_form"):
-                adv_amt = st.number_input("Requested Advance Amount (₹)", min_value=500, step=500, value=2000)
+                adv_amt = st.number_input("Requested Advance Amount (Rs.)", min_value=500, step=500, value=2000)
                 adv_reason = st.text_area("Reason for Advance")
                 if st.form_submit_button("Submit Advance Request", type="primary"):
                     try:
@@ -2816,13 +2766,13 @@ else:
                             "status": "PENDING_SUPERVISOR",
                             "requested_date": today_str
                         }).execute()
-                        st.success("✅ Data Saved Successfully: Advance Salary request submitted to Supervisor!")
+                        st.success("Advance Salary request submitted to Supervisor!")
                     except Exception as e:
                         st.error(f"Error submitting request: {e}")
 
         # 8. CHANGE PASSWORD PANEL
-        elif selected_emp_panel == "🔒 Change Password":
-            st.subheader("Change Portal Password / पासवर्ड बदला")
+        elif selected_emp_panel == "Change Password":
+            st.subheader("Change Portal Password")
             with st.form("change_emp_pwd_form"):
                 new_p1 = st.text_input("New Password", type="password")
                 new_p2 = st.text_input("Confirm New Password", type="password")
@@ -2831,7 +2781,7 @@ else:
                         try:
                             supabase.table("employees").update({"password": new_p1}).eq("id", emp["id"]).execute()
                             st.session_state.user["password"] = new_p1
-                            st.success("✅ Password updated successfully!")
+                            st.success("Password updated successfully!")
                         except Exception as e:
                             st.error(f"Error updating password: {e}")
                     else:
