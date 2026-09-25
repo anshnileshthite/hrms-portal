@@ -1877,7 +1877,7 @@ else:
                             except Exception as e:
                                 st.error(f"Error saving PH: {e}")
 
-        # 11. User Roles & Access
+        # 11. User Roles & Access (Full Entity, Client & Role Edit Support)
         elif selected_panel == "User Roles & Access":
             st.subheader("User Roles & Access Control")
             t_u_add, t_u_edit = st.tabs(["Create User Access", "Edit / Delete User Access"])
@@ -1885,6 +1885,8 @@ else:
             ent_re = fetch_cached_entities()
             cli_m = {c["name"]: c["id"] for c in cli_re}
             ent_m = {e["name"]: e["id"] for e in ent_re}
+            cli_rev = {c["id"]: c["name"] for c in cli_re}
+            ent_rev = {e["id"]: e["name"] for e in ent_re}
 
             with t_u_add:
                 with st.form("create_role_form"):
@@ -1895,21 +1897,26 @@ else:
                     new_p = rc1.text_input("Password *", type="password")
                     new_ph = rc2.text_input("Mobile Number *")
                     assigned_ent = rc3.selectbox("Assign Entity Provider *", options=list(ent_m.keys()) if ent_m else ["No Entity"])
-                    assigned_client = rc1.selectbox("Assign Client Site", options=list(cli_m.keys()) if cli_m else ["No Client"])
+                    assigned_client = rc1.selectbox("Assign Client Site", options=["No Client"] + list(cli_m.keys()))
 
                     if st.form_submit_button("Save User Credentials", type="primary"):
                         if not new_u or not new_n or not new_p or not new_ph:
                             st.error("User ID, Full Name, Password and Mobile Number are required!")
                         else:
-                            supabase.table("employees").insert({
-                                "user_id": new_u, "password": new_p, "full_name": new_n,
-                                "phone_number": new_ph,
-                                "role": new_r, "entity_id": ent_m.get(assigned_ent),
-                                "client_id": cli_m.get(assigned_client), "status": "APPROVED"
-                            }).execute()
-                            st.cache_data.clear()
-                            st.success(f"New {new_r} login created for {new_n}!")
-                            st.rerun()
+                            try:
+                                supabase.table("employees").insert({
+                                    "user_id": new_u, "password": new_p, "full_name": new_n,
+                                    "phone_number": new_ph,
+                                    "role": new_r, 
+                                    "entity_id": ent_m.get(assigned_ent),
+                                    "client_id": cli_m.get(assigned_client) if assigned_client != "No Client" else None, 
+                                    "status": "APPROVED"
+                                }).execute()
+                                st.cache_data.clear()
+                                st.success(f"New {new_r} login created for {new_n}!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error creating user: {e}")
 
             with t_u_edit:
                 users_res = supabase.table("employees").select("*").in_("role", ["supervisor", "client", "admin"]).execute().data or []
@@ -1917,23 +1924,53 @@ else:
                     u_map = {f"[{u.get('role').upper()}] {u.get('user_id')} - {u.get('full_name')}": u for u in users_res}
                     sel_u = st.selectbox("Select User to Modify/Delete", list(u_map.keys()))
                     curr_u = u_map[sel_u]
+                    
                     with st.form("edit_user_form"):
-                        up_un = st.text_input("Full Name", value=curr_u.get("full_name", ""))
-                        up_up = st.text_input("New Password", value=curr_u.get("password", ""))
-                        up_ph = st.text_input("Mobile Number", value=curr_u.get("phone_number", ""))
-                        uc1, uc2 = st.columns(2)
-                        if uc1.form_submit_button("Update User", type="primary"):
-                            supabase.table("employees").update({
-                                "full_name": up_un, "password": up_up, "phone_number": up_ph
-                            }).eq("id", curr_u["id"]).execute()
-                            st.cache_data.clear()
-                            st.success("User updated successfully!")
-                            st.rerun()
-                        if uc2.form_submit_button("Delete User"):
-                            supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
-                            st.cache_data.clear()
-                            st.warning("User access revoked!")
-                            st.rerun()
+                        uc1, uc2, uc3 = st.columns(3)
+                        up_un = uc1.text_input("Full Name", value=curr_u.get("full_name", ""))
+                        up_up = uc2.text_input("Password", value=curr_u.get("password", ""))
+                        up_ph = uc3.text_input("Mobile Number", value=curr_u.get("phone_number", ""))
+                        
+                        roles_list = ["supervisor", "client", "admin"]
+                        curr_role_val = curr_u.get("role", "supervisor")
+                        role_def_idx = roles_list.index(curr_role_val) if curr_role_val in roles_list else 0
+                        up_role = uc1.selectbox("Role", roles_list, index=role_def_idx)
+
+                        curr_ent_val = ent_rev.get(curr_u.get("entity_id"))
+                        ent_opts_list = list(ent_m.keys())
+                        ent_def_idx = ent_opts_list.index(curr_ent_val) if curr_ent_val in ent_opts_list else 0
+                        up_assigned_ent = uc2.selectbox("Assigned Entity", options=ent_opts_list if ent_opts_list else ["No Entity"], index=ent_def_idx)
+
+                        curr_cli_val = cli_rev.get(curr_u.get("client_id"))
+                        cli_opts_list = ["No Client"] + list(cli_m.keys())
+                        cli_def_idx = cli_opts_list.index(curr_cli_val) if curr_cli_val in cli_opts_list else 0
+                        up_assigned_cli = uc3.selectbox("Assigned Client Site", options=cli_opts_list, index=cli_def_idx)
+
+                        b_col1, b_col2 = st.columns(2)
+                        if b_col1.form_submit_button("Update User Access", type="primary"):
+                            try:
+                                supabase.table("employees").update({
+                                    "full_name": up_un, 
+                                    "password": up_up, 
+                                    "phone_number": up_ph,
+                                    "role": up_role,
+                                    "entity_id": ent_m.get(up_assigned_ent),
+                                    "client_id": cli_m.get(up_assigned_cli) if up_assigned_cli != "No Client" else None
+                                }).eq("id", curr_u["id"]).execute()
+                                st.cache_data.clear()
+                                st.success("User access and mapping updated successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error updating user: {e}")
+
+                        if b_col2.form_submit_button("Delete User Access"):
+                            try:
+                                supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
+                                st.cache_data.clear()
+                                st.warning("User access revoked successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error deleting user: {e}")
                 else:
                     st.info("No user access accounts configured yet.")
 
