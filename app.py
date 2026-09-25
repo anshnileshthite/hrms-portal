@@ -1402,7 +1402,7 @@ else:
                     })
                 st.dataframe(pd.DataFrame(formatted_ppe_rows), use_container_width=True)
 
-        elif selected_panel == "📑 Monthly Payroll Processing":
+        elif selected_panel == "Monthly Payroll Processing":
             st.subheader("Monthly Payroll Engine & Wage Sheet (Full Statutory Format)")
 
             p_col1, p_col2 = st.columns(2)
@@ -1592,7 +1592,8 @@ else:
             else:
                 st.info("No approved employees found for the selected entity filter.")
 
-        elif selected_panel == "🧾 Client Billing & Invoices":
+        # 7. CLIENT BILLING & INVOICES (With Full Field Manual Entry)
+        elif selected_panel == "Client Billing & Invoices":
             st.subheader("Client Billing & Tax Invoice Generator (Exact Replica)")
             t_inv_gen, t_inv_hist = st.tabs(["➕ Generate Tax Invoice", "📑 Invoices History & Downloads"])
             cli_list = fetch_cached_clients()
@@ -1663,7 +1664,8 @@ else:
                 else:
                     st.info("No tax invoices generated yet.")
 
-        elif selected_panel == "💸 Advance / Loan Desk":
+        # 8. ADVANCE / LOAN DESK
+        elif selected_panel == "Advance / Loan Desk":
             st.subheader("Salary Advance & Loan Requests")
 
             try:
@@ -1738,7 +1740,7 @@ else:
             st.session_state.active_sup_tab = "Candidate Verification"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">🛡️ Supervisor Desk</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">● Logged In: SUPERVISOR</div>', unsafe_allow_html=True)
             st.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
             st.caption("SUPERVISOR DESK")
@@ -1757,7 +1759,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="sup_logout"):
+            if st.button("Logout", key="sup_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -1890,7 +1892,7 @@ else:
             st.session_state.active_client_tab = "Plant Workforce Overview"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">🏢 Client Portal</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">● Logged In: CLIENT DESK</div>', unsafe_allow_html=True)
             st.write(f"Authorized Rep: **{st.session_state.user.get('full_name')}**")
             st.caption("CLIENT PORTAL")
@@ -1909,7 +1911,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="cli_logout"):
+            if st.button("Logout", key="cli_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -1961,20 +1963,20 @@ else:
             st.session_state.active_emp_tab = "Daily Punch (Geofenced)"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">📱 ESS Employee Portal</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="logged-badge">● Logged In: ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="logged-badge">● Logged In: EMPLOYEE ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
             st.write(f"User: **{emp.get('full_name')}**")
             st.caption("ESS PORTAL")
 
             emp_tabs = [
-                "⏱️ Daily Punch",
-                "👤 My Profile",
-                "📅 Attendance",
-                "📄 Payslips",
-                "📁 Documents",
-                "🦺 Request PPE",
-                "💰 Request Advance",
-                "🔒 Change Password"
+                "Daily Punch (Geofenced)",
+                "My Profile Details",
+                "Attendance Calendar",
+                "Monthly Payslips (15th)",
+                "Official Documents Vault",
+                "Request PPE Equipment",
+                "Request Salary Advance",
+                "Change Password"
             ]
 
             for ep_tab in emp_tabs:
@@ -1984,7 +1986,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("🚪 Logout", key="emp_logout"):
+            if st.button("Logout", key="emp_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -1993,7 +1995,7 @@ else:
         st.title(selected_emp_panel)
 
         # 1. PUNCH PANEL
-        if selected_emp_panel == "⏱️ Daily Punch":
+        if selected_emp_panel == "Daily Punch (Geofenced)":
             st.subheader("Daily Attendance Punch")
 
             assigned_lat = None
@@ -2065,6 +2067,7 @@ else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
+                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2128,7 +2131,7 @@ else:
                 st.info(f"📋 **Today's Activity:** Status: **Shift Ongoing** | **Punch IN:** `{p_in_disp}` | **Last Punch OUT:** `{p_out_disp}`")
 
         # 2. PROFILE DETAILS PANEL
-        elif selected_emp_panel == "👤 My Profile":
+        elif selected_emp_panel == "My Profile Details":
             st.subheader("Personal, Employment & Statutory Profile / वैयक्तिक आणि रोजगाराची माहिती")
 
             cl_name = "Not Assigned / नियुक्त नाही"
@@ -2203,13 +2206,13 @@ else:
                         st.error("Bank Name, Account Number and IFSC Code are required!")
 
         # 3. ATTENDANCE PANEL
-        elif selected_emp_panel == "📅 Attendance":
+        elif selected_emp_panel == "Attendance Calendar":
             st.subheader("My Attendance Muster & Calendar / माझी उपस्थिती नोंदवही")
             t_day, t_month, t_year, t_ph = st.tabs([
-                "📅 Daily View",
-                "🗓️ Monthly Summary",
-                "📈 Annual Muster",
-                "🎉 Paid Holidays"
+                "📅 Daily View / दैनिक उपस्थिती",
+                "🗓️ Monthly Summary / मासिक गोषवारा",
+                "📈 Annual Muster / वार्षिक मस्टर",
+                "🎉 Paid Holidays / सवेतन सुट्ट्या"
             ])
 
             st.markdown("""
@@ -2444,7 +2447,7 @@ else:
                     st.dataframe(pd.DataFrame(st_holidays), use_container_width=True)
 
         # 4. MONTHLY PAYSLIPS PANEL
-        elif selected_emp_panel == "📄 Payslips":
+        elif selected_emp_panel == "Monthly Payslips (15th)":
             st.subheader("Month-Wise Salary Payslips / मासिक पगार स्लिप")
             st.caption("Official payslips are generated on the 15th of every month following payroll closure.")
             
@@ -2541,7 +2544,7 @@ else:
                 )
 
         # 5. DOCUMENTS VAULT PANEL
-        elif selected_emp_panel == "📁 Documents":
+        elif selected_emp_panel == "Official Documents Vault":
             st.subheader("Official Employment Documents / अधिकृत नोकरी कागदपत्रे")
             ent_obj = supabase.table("entities").select("*").eq("id", emp.get("entity_id")).execute().data
             ent_val = ent_obj[0] if ent_obj else None
@@ -2584,7 +2587,7 @@ else:
                 st.download_button("📥 Download ESIC Card (PDF)", data=b"ESIC Card Document", file_name=f"ESIC_{emp.get('employee_code')}.pdf", mime="application/pdf")
 
         # 6. PPE REQUEST PANEL
-        elif selected_emp_panel == "🦺 Request PPE":
+        elif selected_emp_panel == "Request PPE Equipment":
             st.subheader("Request Safety Equipment / PPE / सुरक्षा साधनांची मागणी")
             
             emp_catalog = []
@@ -2624,7 +2627,7 @@ else:
                             st.error(f"Error submitting PPE request: {e}")
 
         # 7. ADVANCE SALARY PANEL
-        elif selected_emp_panel == "💰 Request Advance":
+        elif selected_emp_panel == "Request Salary Advance":
             st.subheader("Apply for Salary Advance or Loan / ॲडव्हान्स पगार अर्ज")
             with st.form("emp_adv_standalone_form"):
                 adv_amt = st.number_input("Requested Advance Amount (₹)", min_value=500, step=500, value=2000)
@@ -2643,7 +2646,7 @@ else:
                         st.error(f"Error submitting request: {e}")
 
         # 8. CHANGE PASSWORD PANEL
-        elif selected_emp_panel == "🔒 Change Password":
+        elif selected_emp_panel == "Change Password":
             st.subheader("Change Portal Password / पासवर्ड बदला")
             with st.form("change_emp_pwd_form"):
                 new_p1 = st.text_input("New Password", type="password")
