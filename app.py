@@ -4,6 +4,7 @@ import urllib.parse
 import io
 import os
 import math
+import time as pytime
 from datetime import date, datetime, time
 from database import supabase
 
@@ -18,28 +19,28 @@ from reportlab.lib import colors
 # -------------------------------------------------------------
 st.set_page_config(page_title="ESS PORTAL", layout="wide")
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def fetch_cached_entities():
     try:
         return supabase.table("entities").select("*").execute().data or []
     except Exception:
         return []
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def fetch_cached_clients():
     try:
         return supabase.table("clients").select("*").execute().data or []
     except Exception:
         return []
 
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=10)
 def fetch_cached_employees():
     try:
         return supabase.table("employees").select("*").execute().data or []
     except Exception:
         return []
 
-# Custom CSS Styling (Clean & Direct)
+# Custom CSS Styling
 st.markdown("""
     <style>
     .main-title { font-size: 24px; font-weight: 700; color: #1E293B; margin-bottom: 12px; }
@@ -104,7 +105,6 @@ def get_entity_assets(code_prefix):
     pref = str(code_prefix or "sagar").lower().strip()
     stamp_path = f"{pref}_stamp.png"
     sig_path = f"{pref}_signature.png"
-    
     final_stamp = stamp_path if os.path.exists(stamp_path) else ("stamp.png" if os.path.exists("stamp.png") else None)
     final_sig = sig_path if os.path.exists(sig_path) else ("signature.png" if os.path.exists("signature.png") else None)
     return final_stamp, final_sig
@@ -114,7 +114,6 @@ def num_to_words(number):
         units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"]
         teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
         tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
-        
         def conv(n):
             if n < 10: return units[n]
             elif n < 20: return teens[n-10]
@@ -123,7 +122,6 @@ def num_to_words(number):
             elif n < 100000: return conv(n//1000) + " Thousand" + (" " + conv(n%1000) if n%1000!=0 else "")
             elif n < 10000000: return conv(n//100000) + " Lakh" + (" " + conv(n%100000) if n%100000!=0 else "")
             else: return conv(n//10000000) + " Crore" + (" " + conv(n%10000000) if n%10000000!=0 else "")
-
         num_int = int(number)
         num_dec = int(round((number - num_int) * 100))
         words = "Indian Rupees " + conv(num_int)
@@ -134,15 +132,11 @@ def num_to_words(number):
     except Exception:
         return f"Indian Rupees {number:,.2f} Only"
 
-# -------------------------------------------------------------
-# DYNAMIC EXACT SALARY STRUCTURE RESOLUTION
-# -------------------------------------------------------------
 def get_exact_salary_rule(entity_id, client_id, designation, category):
     try:
         if not entity_id:
             all_s = supabase.table("salary_structures").select("*").limit(1).execute().data
             return all_s[0] if all_s else None
-
         sr_query = supabase.table("salary_structures").select("*").eq("entity_id", entity_id)
         if client_id:
             sr_query = sr_query.eq("client_id", client_id)
@@ -153,11 +147,9 @@ def get_exact_salary_rule(entity_id, client_id, designation, category):
         matched = sr_query.execute().data
         if matched:
             return matched[0]
-            
         fb1 = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).execute().data
         if fb1:
             return fb1[0]
-            
         fb2 = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).execute().data
         if fb2:
             return fb2[0]
@@ -165,9 +157,6 @@ def get_exact_salary_rule(entity_id, client_id, designation, category):
         pass
     return None
 
-# -------------------------------------------------------------
-# EXACT REPLICA: OFFICIAL OFFER LETTER PDF
-# -------------------------------------------------------------
 def generate_official_offer_letter(emp_data, entity_obj, client_name="Authorized Client Site", sal_rule=None):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=60)
@@ -183,22 +172,14 @@ def generate_official_offer_letter(emp_data, entity_obj, client_name="Authorized
     ent_email = entity_obj.get("email", "gemshine855@gmail.com") if entity_obj else "gemshine855@gmail.com"
 
     logo_file = get_entity_logo(entity_name)
-    logo_img_p1 = None
-    logo_img_p2 = None
-    if logo_file and os.path.exists(logo_file):
-        try:
-            logo_img_p1 = RLImage(logo_file, width=130, height=45)
-            logo_img_p2 = RLImage(logo_file, width=130, height=45)
-        except Exception:
-            logo_img_p1 = None
-            logo_img_p2 = None
+    logo_img_p1 = RLImage(logo_file, width=130, height=45) if (logo_file and os.path.exists(logo_file)) else None
+    logo_img_p2 = RLImage(logo_file, width=130, height=45) if (logo_file and os.path.exists(logo_file)) else None
 
     def draw_fixed_footer(canvas_obj, document):
         canvas_obj.saveState()
         canvas_obj.setFont("Helvetica-Bold", 8)
         canvas_obj.setFillColor(colors.HexColor("#0F172A"))
         canvas_obj.drawCentredString(letter[0] / 2.0, 42, entity_name)
-        
         canvas_obj.setFont("Helvetica", 7)
         canvas_obj.setFillColor(colors.HexColor("#334155"))
         canvas_obj.drawCentredString(letter[0] / 2.0, 31, f"Registered Office: {ent_addr}")
@@ -287,7 +268,6 @@ The details of your salary bifurcation are as below -"""
         ('TOPPADDING', (0,0), (-1,-1), 2.5),
     ]))
     story.append(st_table)
-
     story.append(PageBreak())
 
     p2_head = Table([["", logo_img_p2 if logo_img_p2 else ""]], colWidths=[380, 160])
@@ -312,14 +292,10 @@ Employee Name: <b>""" + str(emp_data.get('full_name')) + """</b><br/><br/>
 Signature: ___________________________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ___________________
 """
     story.append(Paragraph(p2_text, styles["Normal"]))
-
     doc.build(story, onFirstPage=draw_fixed_footer, onLaterPages=draw_fixed_footer)
     buffer.seek(0)
     return buffer.getvalue()
 
-# -------------------------------------------------------------
-# EXACT REPLICA: TAX INVOICE PDF GENERATION
-# -------------------------------------------------------------
 def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
@@ -352,7 +328,6 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     story.append(Spacer(1, 5))
 
     p_from = Paragraph(f"<b>From -</b><br/><b>{e_name}</b><br/>{e_addr}<br/><b>GSTIN/UIN:</b> {e_gst}", styles["Normal"])
-    
     ref_txt = f"{inv_data.get('reference_no') or '-'} {inv_data.get('reference_date') or ''}"
     order_txt = f"{inv_data.get('buyers_order_no') or '-'} {inv_data.get('buyers_order_date') or ''}"
     
@@ -453,7 +428,6 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     
     stamp_f, sig_f = get_entity_assets(code_pref)
     sign_elements = [Paragraph(f"<b>for {e_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
-    
     if stamp_f and sig_f:
         sign_elements.append(Spacer(1, 4))
         sign_elements.append(Table([[RLImage(stamp_f, width=50, height=50), RLImage(sig_f, width=80, height=40)]], colWidths=[60, 90]))
@@ -476,14 +450,10 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
         ('PADDING', (0,0), (-1,-1), 5),
     ]))
     story.append(t_bottom)
-
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
 
-# -------------------------------------------------------------
-# EXACT REPLICA: SALARY PAYSLIP PDF GENERATION
-# -------------------------------------------------------------
 def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
@@ -715,6 +685,7 @@ if not st.session_state.user:
                     try:
                         supabase.table("employees").insert(new_candidate).execute()
                         st.cache_data.clear()
+                        st.toast("✅ Application submitted successfully!")
                         st.success("Application submitted successfully! Forwarded to Supervisor.")
                     except Exception as err:
                         st.error(f"Error submitting data: {err}")
@@ -766,7 +737,7 @@ else:
             if ent_res:
                 for ent in ent_res:
                     st.markdown(f"#### Entity: **{ent['name']}**")
-                    ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status") == "APPROVED"]
+                    ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status") == "APPROVED" and e.get("role") == "employee"]
                     matched_clients = [c for c in cli_res if c.get("entity_id") == ent["id"]]
                     if matched_clients:
                         cols = st.columns(max(len(matched_clients), 1))
@@ -779,7 +750,7 @@ else:
             else:
                 st.info("No entities configured yet.")
 
-        # 2. Employee Master & Docs (Full Assignment Control)
+        # 2. Employee Master & Docs (Full Assignment Control + Duplicate Code Protection)
         elif selected_panel == "Employee Master & Docs":
             st.subheader("Employee Master Management & Document Vault")
             ent_list = fetch_cached_entities()
@@ -795,7 +766,7 @@ else:
                 with st.form("manual_full_emp_with_docs_form"):
                     st.write("##### 1. Personal & Employment Information")
                     m1, m2, m3 = st.columns(3)
-                    me_code = m1.text_input("Employee Code * (e.g. SE001)")
+                    me_code = m1.text_input("Employee Code * (e.g. SE001)").strip().upper()
                     me_name = m2.text_input("Full Name *")
                     me_father = m3.text_input("Father's Name")
                     me_gender = m1.selectbox("Gender", ["Male", "Female", "Other"])
@@ -835,37 +806,45 @@ else:
                         if not me_code or not me_name or not me_phone:
                             st.error("Employee Code, Full Name, and Mobile Number are mandatory!")
                         else:
-                            try:
-                                supabase.table("employees").insert({
-                                    "employee_code": me_code, "user_id": me_code, "password": me_pwd if me_pwd else "emp1234",
-                                    "full_name": me_name, "father_name": me_father, "gender": me_gender, "dob": str(me_dob),
-                                    "phone_number": me_phone, "emergency_contact": me_emg, "marital_status": me_marital, 
-                                    "designation": me_desig, "category": me_cat, "shift_hours": 8.5, 
-                                    "shift_timing": me_shift_timing, "ot_rate_per_hour": me_ot_rate if me_ot_rate > 0 else None,
-                                    "weekly_off_day": me_wo_day, 
-                                    "entity_id": e_map.get(sel_ent), "client_id": c_map.get(sel_cli),
-                                    "uan_number": me_uan, "esic_number": me_esic, "pan_number": me_pan, "aadhar_number": me_aadhar,
-                                    "bank_name": me_bank, "bank_branch": me_branch, "bank_account_no": me_acc,
-                                    "ifsc_code": me_ifsc, "role": "employee", "status": "APPROVED",
-                                    "joining_date": str(me_joining_date)
-                                }).execute()
-                                st.cache_data.clear()
-                                st.success(f"Employee {me_name} registered successfully!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error saving employee: {e}")
+                            # Check duplicate Employee Code
+                            dup_chk = supabase.table("employees").select("id").eq("employee_code", me_code).execute().data
+                            if dup_chk:
+                                st.error(f"Error: Employee Code '{me_code}' is already assigned to another employee! Please use a unique code.")
+                            else:
+                                try:
+                                    supabase.table("employees").insert({
+                                        "employee_code": me_code, "user_id": me_code, "password": me_pwd if me_pwd else "emp1234",
+                                        "full_name": me_name, "father_name": me_father, "gender": me_gender, "dob": str(me_dob),
+                                        "phone_number": me_phone, "emergency_contact": me_emg, "marital_status": me_marital, 
+                                        "designation": me_desig, "category": me_cat, "shift_hours": 8.5, 
+                                        "shift_timing": me_shift_timing, "ot_rate_per_hour": me_ot_rate if me_ot_rate > 0 else None,
+                                        "weekly_off_day": me_wo_day, 
+                                        "entity_id": e_map.get(sel_ent), "client_id": c_map.get(sel_cli),
+                                        "uan_number": me_uan, "esic_number": me_esic, "pan_number": me_pan, "aadhar_number": me_aadhar,
+                                        "bank_name": me_bank, "bank_branch": me_branch, "bank_account_no": me_acc,
+                                        "ifsc_code": me_ifsc, "role": "employee", "status": "APPROVED",
+                                        "joining_date": str(me_joining_date)
+                                    }).execute()
+                                    st.cache_data.clear()
+                                    st.toast(f"✅ Employee {me_name} saved successfully!")
+                                    st.success(f"Employee {me_name} registered successfully!")
+                                    pytime.sleep(1)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error saving employee: {e}")
 
             with tab_edit_emp:
                 all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if all_emps:
-                    emp_opt_map = {f"[{e.get('employee_code', 'N/A')}] {e.get('full_name')}": e for e in all_emps}
+                    # Guarantees Unique Key in dropdown using employee ID
+                    emp_opt_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (ID: {e['id'][:6]})": e for e in all_emps}
                     sel_emp_to_edit = st.selectbox("Select Employee to Update / Delete", list(emp_opt_map.keys()))
                     curr_selected = emp_opt_map[sel_emp_to_edit]
 
                     with st.form("edit_emp_crud_form"):
                         st.write("##### 1. Login Credentials & Identifiers")
                         c_u1, c_u2, c_u3 = st.columns(3)
-                        up_code = c_u1.text_input("Employee Code", value=curr_selected.get("employee_code", ""))
+                        up_code = c_u1.text_input("Employee Code", value=curr_selected.get("employee_code", "")).strip().upper()
                         up_uid = c_u2.text_input("User ID (Login)", value=curr_selected.get("user_id", ""))
                         up_pwd = c_u3.text_input("Portal Password", value=curr_selected.get("password", ""))
 
@@ -932,6 +911,13 @@ else:
                         st.write("---")
                         c_btn1, c_btn2 = st.columns(2)
                         if c_btn1.form_submit_button("Update Employee Data", type="primary"):
+                            # Validate Duplicate Code across other employees
+                            if up_code:
+                                dup_code_other = supabase.table("employees").select("id").eq("employee_code", up_code).neq("id", curr_selected["id"]).execute().data
+                                if dup_code_other:
+                                    st.error(f"Error: Employee Code '{up_code}' already exists on another employee record!")
+                                    st.stop()
+
                             supabase.table("employees").update({
                                 "employee_code": up_code, "user_id": up_uid, "password": up_pwd,
                                 "entity_id": e_map.get(up_ent), "client_id": c_map.get(up_cli),
@@ -946,13 +932,17 @@ else:
                                 "bank_account_no": up_acc, "ifsc_code": up_ifsc
                             }).eq("id", curr_selected["id"]).execute()
                             st.cache_data.clear()
-                            st.success("Employee record refreshed successfully!")
+                            st.toast("✅ Employee record updated successfully!")
+                            st.success("Employee record updated successfully!")
+                            pytime.sleep(1)
                             st.rerun()
 
                         if c_btn2.form_submit_button("Delete Employee"):
                             supabase.table("employees").delete().eq("id", curr_selected["id"]).execute()
                             st.cache_data.clear()
+                            st.toast("🗑️ Employee record removed successfully!")
                             st.warning("Employee record removed successfully!")
+                            pytime.sleep(1)
                             st.rerun()
                 else:
                     st.info("No employee records found.")
@@ -960,7 +950,7 @@ else:
             with tab_vault:
                 emp_records = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if emp_records:
-                    emp_lookup = {f"[{emp.get('employee_code', 'TEMP')}] {emp.get('full_name')}": emp for emp in emp_records}
+                    emp_lookup = {f"[{emp.get('employee_code', 'TEMP')}] {emp.get('full_name')} (ID: {emp['id'][:6]})": emp for emp in emp_records}
                     sel_emp_label = st.selectbox("Choose Employee for Documents", options=list(emp_lookup.keys()))
                     curr_emp = emp_lookup[sel_emp_label]
 
@@ -982,20 +972,28 @@ else:
 
                         st.markdown("##### 3. Aadhaar Card Copy")
                         f_aadh = st.file_uploader("Upload Aadhaar", type=["pdf", "jpg", "png"], key=f"vault_aadh_{curr_emp['id']}")
-                        if f_aadh: st.success("Aadhaar copy updated!")
+                        if f_aadh: 
+                            st.toast("✅ Aadhaar copy updated!")
+                            st.success("Aadhaar copy updated!")
 
                     with v_c2:
                         st.markdown("##### 2. ESIC Certificate / Card")
                         f_esic = st.file_uploader("Upload ESIC Document", type=["pdf", "jpg", "png"], key=f"vault_esic_{curr_emp['id']}")
-                        if f_esic: st.success("ESIC Document updated!")
+                        if f_esic: 
+                            st.toast("✅ ESIC Document updated!")
+                            st.success("ESIC Document updated!")
 
                         st.markdown("##### 4. PAN Card Copy")
                         f_pan = st.file_uploader("Upload PAN Card", type=["pdf", "jpg", "png"], key=f"vault_pan_{curr_emp['id']}")
-                        if f_pan: st.success("PAN Card updated!")
+                        if f_pan: 
+                            st.toast("✅ PAN Card updated!")
+                            st.success("PAN Card updated!")
 
                         st.markdown("##### 5. Bank Passbook / Cheque Copy")
                         f_bnk = st.file_uploader("Upload Bank Passbook / Cheque", type=["pdf", "jpg", "png"], key=f"vault_bnk_{curr_emp['id']}")
-                        if f_bnk: st.success("Bank Details updated!")
+                        if f_bnk: 
+                            st.toast("✅ Bank Details updated!")
+                            st.success("Bank Details updated!")
 
         # 3. Candidate Approvals
         elif selected_panel == "Candidate Approvals":
@@ -1013,7 +1011,7 @@ else:
                         prefix = selected_ent.get("code_prefix", "SE")
                         
                         generated_code = f"{prefix}{str(cand.get('id', '001'))[:4].upper()}"
-                        set_user_id = app1.text_input("User ID (Default Employee Code)", value=generated_code, key=f"uid_{cand['id']}")
+                        set_user_id = app1.text_input("User ID (Default Employee Code)", value=generated_code, key=f"uid_{cand['id']}").strip().upper()
                         set_pwd = app2.text_input("Set Initial Password", value="emp" + cand['phone_number'][-4:], key=f"pwd_{cand['id']}")
                         
                         app_c1, app_c2 = st.columns(2)
@@ -1029,32 +1027,40 @@ else:
 
                         col_act1, col_act2 = st.columns(2)
                         if col_act1.button("Approve & Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
-                            supabase.table("employees").update({
-                                "employee_code": set_user_id, 
-                                "user_id": set_user_id, 
-                                "password": set_pwd,
-                                "designation": conf_desig,
-                                "category": conf_cat,
-                                "status": "APPROVED",
-                                "weekly_off_day": sel_wo,
-                                "shift_hours": 8.5,
-                                "shift_timing": sel_shift,
-                                "joining_date": str(set_join_date),
-                                "entity_id": selected_ent.get("id", cand.get("entity_id"))
-                            }).eq("id", cand["id"]).execute()
-                            
-                            st.cache_data.clear()
-                            msg = f"Hello {cand['full_name']}, Welcome! Your ESS Portal login credentials are: User ID: {set_user_id}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
-                            encoded_msg = urllib.parse.quote(msg)
-                            wa_url = f"https://wa.me/91{cand['phone_number']}?text={encoded_msg}"
-                            
-                            st.success(f"Candidate approved! User ID: {set_user_id}")
-                            st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">Send Login via WhatsApp</a>', unsafe_allow_html=True)
+                            # Check duplicate Code
+                            dup_chk = supabase.table("employees").select("id").eq("employee_code", set_user_id).neq("id", cand["id"]).execute().data
+                            if dup_chk:
+                                st.error(f"Error: Employee Code '{set_user_id}' is already taken! Please assign a unique code.")
+                            else:
+                                supabase.table("employees").update({
+                                    "employee_code": set_user_id, 
+                                    "user_id": set_user_id, 
+                                    "password": set_pwd,
+                                    "designation": conf_desig,
+                                    "category": conf_cat,
+                                    "status": "APPROVED",
+                                    "weekly_off_day": sel_wo,
+                                    "shift_hours": 8.5,
+                                    "shift_timing": sel_shift,
+                                    "joining_date": str(set_join_date),
+                                    "entity_id": selected_ent.get("id", cand.get("entity_id"))
+                                }).eq("id", cand["id"]).execute()
+                                
+                                st.cache_data.clear()
+                                msg = f"Hello {cand['full_name']}, Welcome! Your ESS Portal login credentials are: User ID: {set_user_id}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
+                                encoded_msg = urllib.parse.quote(msg)
+                                wa_url = f"https://wa.me/91{cand['phone_number']}?text={encoded_msg}"
+                                
+                                st.toast("✅ Candidate approved successfully!")
+                                st.success(f"Candidate approved! User ID: {set_user_id}")
+                                st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">Send Login via WhatsApp</a>', unsafe_allow_html=True)
 
                         if col_act2.button("Reject & Delete Application", key=f"rej_{cand['id']}"):
                             supabase.table("employees").delete().eq("id", cand["id"]).execute()
                             st.cache_data.clear()
+                            st.toast("🗑️ Application rejected!")
                             st.warning("Application rejected successfully!")
+                            pytime.sleep(1)
                             st.rerun()
             else:
                 st.info("No candidates pending admin approval.")
@@ -1122,7 +1128,9 @@ else:
                             "employer_pf_pct": r_er_pf, "employer_esic_pct": r_er_esic,
                             "statutory_bonus": r_bonus, "monthly_ctc": m_ctc, "annual_ctc": a_ctc
                         }).execute()
+                        st.toast("✅ Salary rule added successfully!")
                         st.success("Salary structure rule added successfully!")
+                        pytime.sleep(1)
                         st.rerun()
 
             with tab_sal_edit:
@@ -1160,12 +1168,16 @@ else:
                                 "employer_pf_pct": e_er_pf, "employer_esic_pct": e_er_esic,
                                 "monthly_ctc": up_m_ctc, "annual_ctc": up_m_ctc * 12
                             }).eq("id", curr_s["id"]).execute()
+                            st.toast("✅ Salary rule updated successfully!")
                             st.success("Rule refreshed successfully!")
+                            pytime.sleep(1)
                             st.rerun()
 
                         if sb2.form_submit_button("Delete Salary Rule"):
                             supabase.table("salary_structures").delete().eq("id", curr_s["id"]).execute()
+                            st.toast("🗑️ Salary rule deleted!")
                             st.warning("Salary rule removed successfully!")
+                            pytime.sleep(1)
                             st.rerun()
                 else:
                     st.info("No salary structure rules defined yet.")
@@ -1175,7 +1187,7 @@ else:
             st.subheader("Manual Attendance, Shift Timings & OT Management")
             at_tab_save, at_tab_del = st.tabs(["Add / Update Attendance Record", "Delete Attendance Record"])
             emp_list = fetch_cached_employees()
-            emp_map = {f"[{e.get('employee_code')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
+            emp_map = {f"[{e.get('employee_code', 'TEMP')}] {e['full_name']} (ID: {e['id'][:6]})": e["id"] for e in emp_list if e.get("role") == "employee"}
 
             with at_tab_save:
                 with st.form("attendance_save_form"):
@@ -1195,6 +1207,7 @@ else:
                                 "employee_id": emp_map[sel_e], "date": str(sel_d),
                                 "status": st_code, "ot_hours": ot_h, "is_valid_geo": True
                             }, on_conflict="employee_id,date").execute()
+                            st.toast("✅ Attendance record saved!")
                             st.success(f"Attendance logged for {sel_e}!")
 
             with at_tab_del:
@@ -1204,9 +1217,10 @@ else:
                     if st.form_submit_button("Delete Attendance Record"):
                         if emp_map:
                             supabase.table("attendance").delete().eq("employee_id", emp_map[d_sel_e]).eq("date", str(d_sel_d)).execute()
+                            st.toast("🗑️ Attendance deleted successfully!")
                             st.warning(f"Attendance deleted for {d_sel_d}!")
 
-        # 6. Monthly Payroll Processing (Actual Logged Data Only - No Dummy Data)
+        # 6. Monthly Payroll Processing (Actual Logged Data Only)
         elif selected_panel == "Monthly Payroll Processing":
             st.subheader("Monthly Payroll Engine & Wage Sheet (Full Statutory Format)")
 
@@ -1387,6 +1401,7 @@ else:
                                 "payroll_month": sel_month,
                                 "is_locked": True
                             }, on_conflict="entity_id,payroll_month").execute()
+                        st.toast("🔒 Wage Sheet locked successfully!")
                         st.success(f"Wage Sheet for {sel_month} locked! Now visible to employees.")
             else:
                 st.info("No approved employees found for the selected entity filter.")
@@ -1446,7 +1461,9 @@ else:
                                 "billing_month": inv_month, "hsn_sac": inv_hsn, "total_amount": inv_subtotal, 
                                 "payment_status": "PENDING"
                             }).execute()
+                            st.toast("✅ Tax Invoice generated successfully!")
                             st.success("Tax Invoice generated successfully!")
+                            pytime.sleep(1)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error saving invoice: {e}")
@@ -1503,12 +1520,16 @@ else:
                             col_ap, col_rj, _ = st.columns([1.5, 1.5, 5])
                             if col_ap.button("Approve Advance", key=f"adv_app_{req['id']}", type="primary"):
                                 supabase.table("advance_salaries").update({"status": "APPROVED"}).eq("id", req["id"]).execute()
+                                st.toast("✅ Advance Approved!")
                                 st.success(f"Advance Approved for {req_emp.get('full_name')}!")
+                                pytime.sleep(1)
                                 st.rerun()
 
                             if col_rj.button("Reject Request", key=f"adv_rej_{req['id']}"):
                                 supabase.table("advance_salaries").update({"status": "REJECTED_BY_ADMIN"}).eq("id", req["id"]).execute()
+                                st.toast("Advance request rejected!")
                                 st.warning("Advance request rejected!")
+                                pytime.sleep(1)
                                 st.rerun()
                     else:
                         st.info("No pending advance requests from supervisor.")
@@ -1547,7 +1568,7 @@ else:
 
             p_e_map = {e["name"]: e["id"] for e in ent_list}
             p_c_map = {c["name"]: c["id"] for c in cli_list}
-            p_emp_map = {f"[{e.get('employee_code', 'N/A')}] {e['full_name']}": e["id"] for e in emp_list if e.get("role") == "employee"}
+            p_emp_map = {f"[{e.get('employee_code', 'N/A')}] {e['full_name']} (ID: {e['id'][:6]})": e["id"] for e in emp_list if e.get("role") == "employee"}
 
             emp_obj_lookup = {e["id"]: e for e in emp_list}
             ent_name_lookup = {e["id"]: e["name"] for e in ent_list}
@@ -1573,7 +1594,9 @@ else:
                                     "item_name": cat_item.strip(),
                                     "price": cat_price
                                 }, on_conflict="entity_id,client_id,item_name").execute()
+                                st.toast("✅ PPE Price saved!")
                                 st.success(f"{cat_item} rate (Rs. {cat_price:,.2f}) saved successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error saving catalog: {e}")
@@ -1618,7 +1641,9 @@ else:
                                 "status": "APPROVED",
                                 "assigned_date": str(date.today())
                             }).execute()
+                            st.toast("✅ PPE Issued successfully!")
                             st.success("PPE Issued and Logged successfully!")
+                            pytime.sleep(1)
                             st.rerun()
 
             with tab_ppe_edit:
@@ -1627,7 +1652,7 @@ else:
                     ppe_select_options = {}
                     for p in all_ppes:
                         emp_info = emp_obj_lookup.get(p.get("employee_id"), {})
-                        ppe_select_options[f"[{emp_info.get('employee_code', 'N/A')}] {emp_info.get('full_name', 'Unknown')} - {p.get('item_type')} (Qty: {p.get('quantity')})"] = p
+                        ppe_select_options[f"[{emp_info.get('employee_code', 'N/A')}] {emp_info.get('full_name', 'Unknown')} - {p.get('item_type')} (ID: {p['id'][:6]})"] = p
 
                     sel_p = st.selectbox("Select PPE Record to Edit/Delete", list(ppe_select_options.keys()))
                     curr_p = ppe_select_options[sel_p]
@@ -1645,12 +1670,16 @@ else:
                                 "size": up_size,
                                 "quantity": up_qty
                             }).eq("id", curr_p["id"]).execute()
+                            st.toast("✅ PPE record updated!")
                             st.success("PPE record updated successfully!")
+                            pytime.sleep(1)
                             st.rerun()
 
                         if pb2.form_submit_button("Delete PPE Record"):
                             supabase.table("ppe_records").delete().eq("id", curr_p["id"]).execute()
+                            st.toast("🗑️ PPE record removed!")
                             st.warning("PPE record removed successfully!")
+                            pytime.sleep(1)
                             st.rerun()
                 else:
                     st.info("No PPE records available to edit.")
@@ -1674,12 +1703,16 @@ else:
                         col_r1, col_r2, _ = st.columns([1.5, 1.5, 5])
                         if col_r1.button("Approve PPE", key=f"app_ppe_{req['id']}", type="primary"):
                             supabase.table("ppe_records").update({"status": "APPROVED", "assigned_date": str(date.today())}).eq("id", req["id"]).execute()
+                            st.toast("✅ PPE Item approved!")
                             st.success(f"PPE Item approved for {req_emp.get('full_name')}!")
+                            pytime.sleep(1)
                             st.rerun()
 
                         if col_r2.button("Reject PPE", key=f"rej_ppe_{req['id']}"):
                             supabase.table("ppe_records").update({"status": "REJECTED_BY_ADMIN"}).eq("id", req["id"]).execute()
+                            st.toast("PPE request rejected!")
                             st.warning("PPE request rejected!")
+                            pytime.sleep(1)
                             st.rerun()
                 else:
                     st.info("No pending PPE requests.")
@@ -1732,7 +1765,9 @@ else:
                                     "bank_name": en_bnk, "bank_account_no": en_acc, "ifsc_code": en_ifsc
                                 }).execute()
                                 st.cache_data.clear()
+                                st.toast("✅ Entity registered!")
                                 st.success("Entity registered successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
 
                 with t_ent_edit:
@@ -1766,22 +1801,19 @@ else:
                                 try:
                                     supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
                                     st.cache_data.clear()
+                                    st.toast("✅ Entity refreshed!")
                                     st.success("Entity refreshed successfully!")
+                                    pytime.sleep(1)
                                     st.rerun()
                                 except Exception as e:
-                                    if "pan_number" in str(e):
-                                        update_payload.pop("pan_number", None)
-                                        supabase.table("entities").update(update_payload).eq("id", curr_e["id"]).execute()
-                                        st.cache_data.clear()
-                                        st.success("Entity refreshed successfully!")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Error updating entity: {e}")
+                                    st.error(f"Error updating entity: {e}")
 
                             if c2.form_submit_button("Delete Entity"):
                                 supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
                                 st.cache_data.clear()
+                                st.toast("🗑️ Entity removed!")
                                 st.warning("Entity removed successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
 
             with loc2:
@@ -1815,7 +1847,9 @@ else:
                                     "latitude": cl_lat, "longitude": cl_lon, "entity_id": e_dict.get(assigned_ent)
                                 }).execute()
                                 st.cache_data.clear()
+                                st.toast("✅ Client registered!")
                                 st.success("Client registered successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
 
                 with t_cli_edit:
@@ -1845,12 +1879,16 @@ else:
                                     "latitude": cl_up_lat, "longitude": cl_up_lon
                                 }).eq("id", curr_c["id"]).execute()
                                 st.cache_data.clear()
+                                st.toast("✅ Client details refreshed!")
                                 st.success("Client details refreshed successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
                             if cb2.form_submit_button("Delete Client"):
                                 supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
                                 st.cache_data.clear()
+                                st.toast("🗑️ Client removed!")
                                 st.warning("Client removed successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
 
             st.write("---")
@@ -1872,7 +1910,9 @@ else:
                                     "holiday_date": str(ph_date),
                                     "holiday_name": ph_name
                                 }).execute()
+                                st.toast("✅ Paid Holiday added!")
                                 st.success(f"Paid Holiday '{ph_name}' added successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error saving PH: {e}")
@@ -1892,7 +1932,7 @@ else:
                 with st.form("create_role_form"):
                     rc1, rc2, rc3 = st.columns(3)
                     new_r = rc1.selectbox("Role", ["supervisor", "client", "admin"])
-                    new_u = rc2.text_input("User ID *")
+                    new_u = rc2.text_input("User ID *").strip()
                     new_n = rc3.text_input("Full Name *")
                     new_p = rc1.text_input("Password *", type="password")
                     new_ph = rc2.text_input("Mobile Number *")
@@ -1907,13 +1947,14 @@ else:
                                 supabase.table("employees").insert({
                                     "user_id": new_u, "password": new_p, "full_name": new_n,
                                     "phone_number": new_ph,
-                                    "role": new_r, 
-                                    "entity_id": ent_m.get(assigned_ent),
+                                    "role": new_r, "entity_id": ent_m.get(assigned_ent),
                                     "client_id": cli_m.get(assigned_client) if assigned_client != "No Client" else None, 
                                     "status": "APPROVED"
                                 }).execute()
                                 st.cache_data.clear()
+                                st.toast(f"✅ User {new_u} created!")
                                 st.success(f"New {new_r} login created for {new_n}!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error creating user: {e}")
@@ -1921,7 +1962,7 @@ else:
             with t_u_edit:
                 users_res = supabase.table("employees").select("*").in_("role", ["supervisor", "client", "admin"]).execute().data or []
                 if users_res:
-                    u_map = {f"[{u.get('role').upper()}] {u.get('user_id')} - {u.get('full_name')}": u for u in users_res}
+                    u_map = {f"[{u.get('role').upper()}] {u.get('user_id')} - {u.get('full_name')} (ID: {u['id'][:6]})": u for u in users_res}
                     sel_u = st.selectbox("Select User to Modify/Delete", list(u_map.keys()))
                     curr_u = u_map[sel_u]
                     
@@ -1958,7 +1999,9 @@ else:
                                     "client_id": cli_m.get(up_assigned_cli) if up_assigned_cli != "No Client" else None
                                 }).eq("id", curr_u["id"]).execute()
                                 st.cache_data.clear()
+                                st.toast("✅ User access and mapping updated successfully!")
                                 st.success("User access and mapping updated successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error updating user: {e}")
@@ -1967,7 +2010,9 @@ else:
                             try:
                                 supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
                                 st.cache_data.clear()
+                                st.toast("🗑️ User access revoked!")
                                 st.warning("User access revoked successfully!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error deleting user: {e}")
@@ -1981,7 +2026,7 @@ else:
             
             all_bound_emps = supabase.table("employees").select("id, employee_code, full_name, phone_number, device_binding_id").eq("role", "employee").execute().data or []
             if all_bound_emps:
-                emp_bind_map = {f"[{e.get('employee_code')}] {e['full_name']} (Phone: {e.get('phone_number')})": e for e in all_bound_emps}
+                emp_bind_map = {f"[{e.get('employee_code', 'TEMP')}] {e['full_name']} (ID: {e['id'][:6]})": e for e in all_bound_emps}
                 sel_b_emp = st.selectbox("Select Employee to Reset Device Lock", list(emp_bind_map.keys()))
                 target_emp = emp_bind_map[sel_b_emp]
                 
@@ -1990,7 +2035,10 @@ else:
                 if st.button("Reset / Unlink Mobile Device Binding", type="primary"):
                     try:
                         supabase.table("employees").update({"device_binding_id": None}).eq("id", target_emp["id"]).execute()
+                        st.cache_data.clear()
+                        st.toast("✅ Device binding reset!")
                         st.success(f"Device binding successfully reset for {target_emp['full_name']}! Now they can login from a new phone.")
+                        pytime.sleep(1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error resetting device binding: {e}")
@@ -2073,7 +2121,9 @@ else:
                                     "status": "PENDING_ADMIN"
                                 }).eq("id", c["id"]).execute()
                                 st.cache_data.clear()
+                                st.toast("✅ Candidate verified & forwarded to Admin!")
                                 st.success("Application Verified & Forwarded to Admin!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as err:
                                 st.error(f"Error forwarding candidate: {err}")
@@ -2104,11 +2154,15 @@ else:
                         col1, col2, _ = st.columns([1.5, 1.5, 5])
                         if col1.button("Forward to Admin", key=f"sup_app_ppe_{req['id']}", type="primary"):
                             supabase.table("ppe_records").update({"status": "PENDING_ADMIN"}).eq("id", req["id"]).execute()
+                            st.toast("✅ Forwarded to Admin!")
                             st.success("Verified and forwarded to Admin!")
+                            pytime.sleep(1)
                             st.rerun()
                         if col2.button("Reject", key=f"sup_rej_ppe_{req['id']}"):
                             supabase.table("ppe_records").update({"status": "REJECTED_BY_SUPERVISOR"}).eq("id", req["id"]).execute()
+                            st.toast("Rejected!")
                             st.warning("Rejected!")
+                            pytime.sleep(1)
                             st.rerun()
                 else:
                     st.info("No PPE requests pending supervisor review.")
@@ -2128,11 +2182,15 @@ else:
                         col1, col2, _ = st.columns([1.5, 1.5, 5])
                         if col1.button("Forward to Admin", key=f"sup_app_adv_{req['id']}", type="primary"):
                             supabase.table("advance_salaries").update({"status": "PENDING_ADMIN"}).eq("id", req["id"]).execute()
+                            st.toast("✅ Forwarded to Admin!")
                             st.success("Verified and forwarded to Admin!")
+                            pytime.sleep(1)
                             st.rerun()
                         if col2.button("Reject", key=f"sup_rej_adv_{req['id']}"):
                             supabase.table("advance_salaries").update({"status": "REJECTED_BY_SUPERVISOR"}).eq("id", req["id"]).execute()
+                            st.toast("Rejected!")
                             st.warning("Rejected!")
+                            pytime.sleep(1)
                             st.rerun()
                 else:
                     st.info("No advance requests pending supervisor review.")
@@ -2224,7 +2282,6 @@ else:
     # -------------------------------------------------------------------------
     elif active_role == "employee":
         emp = st.session_state.user
-
         today_date = date.today()
         today_str = str(today_date)
 
@@ -2263,7 +2320,7 @@ else:
         selected_emp_panel = st.session_state.active_emp_tab
         st.title(selected_emp_panel)
 
-        # 1. PUNCH PANEL (Strict 15m Geofence & Browser Permission Fix)
+        # 1. PUNCH PANEL (Strict 15m Geofence)
         if selected_emp_panel == "Daily Punch (Geofenced)":
             st.subheader("Daily Attendance Punch")
 
@@ -2304,7 +2361,7 @@ else:
             except Exception:
                 att_check = []
 
-            # Permission fix with geolocation query param sync
+            # Iframe location fetcher with status
             st.components.v1.html("""
             <div id="gps-status" style="font-family:sans-serif; font-size:12px; color:#64748B;">Detecting GPS location...</div>
             <script>
@@ -2344,7 +2401,6 @@ else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
-                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2354,7 +2410,6 @@ else:
                     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
                     dist = R * c
 
-                    # Strict 15 Meters Geofence Validation
                     is_valid_location = dist <= 15.0
 
                     if is_valid_location:
@@ -2373,7 +2428,9 @@ else:
                                     "ot_hours": 0.0,
                                     "is_valid_geo": True
                                 }, on_conflict="employee_id,date").execute()
+                                st.toast(f"✅ Punch IN Recorded at {display_time}!")
                                 st.success(f"Punch IN Recorded at {display_time}!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error logging Punch IN: {e}")
@@ -2385,7 +2442,9 @@ else:
                                     "status": "IN_PROGRESS",
                                     "is_valid_geo": True
                                 }).eq("id", record["id"]).execute()
+                                st.toast(f"✅ Punch OUT Updated at {display_time}!")
                                 st.success(f"Punch OUT Updated at {display_time}!")
+                                pytime.sleep(1)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error updating Punch OUT: {e}")
@@ -2480,7 +2539,9 @@ else:
                             st.session_state.user["bank_account_no"] = up_acc_no
                             st.session_state.user["ifsc_code"] = up_ifsc
                             st.cache_data.clear()
+                            st.toast("✅ Bank details synchronized successfully!")
                             st.success("Bank details synchronized with Admin portal successfully!")
+                            pytime.sleep(1)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error: {e}")
@@ -2795,7 +2856,7 @@ else:
                 deductions_payload = {
                     'earned_basic': e_basic, 'earned_da': e_da, 'earned_hra': e_hra, 'earned_other': e_other,
                     'ot_amount': e_ot, 'pf_ded': pf_ded, 'esic_ded': esic_ded, 'pt_ded': pt_ded,
-                    'adv_val': adv_d, 'ppe_ded': ppe_d
+                    'adv_val': adv_d, 'ppe_ded': ppe_ded
                 }
                 att_summary_payload = {'paid_days': p_days, 'total_days': p_days, 'ot_hours': ot_hrs}
 
@@ -2808,7 +2869,7 @@ else:
                     mime="application/pdf"
                 )
 
-        # 5. DOCUMENTS VAULT PANEL (Fixed: Safe Fallback against null entity_id)
+        # 5. DOCUMENTS VAULT PANEL
         elif selected_emp_panel == "Official Documents Vault":
             st.subheader("Official Employment Documents")
             
@@ -2887,6 +2948,7 @@ else:
                                 "status": "PENDING_SUPERVISOR",
                                 "assigned_date": today_str
                             }).execute()
+                            st.toast("✅ PPE request submitted successfully!")
                             st.success("PPE request submitted to supervisor successfully!")
                         except Exception as e:
                             st.error(f"Error submitting PPE request: {e}")
@@ -2906,6 +2968,7 @@ else:
                             "status": "PENDING_SUPERVISOR",
                             "requested_date": today_str
                         }).execute()
+                        st.toast("✅ Advance Salary request submitted!")
                         st.success("Advance Salary request submitted to Supervisor!")
                     except Exception as e:
                         st.error(f"Error submitting request: {e}")
@@ -2921,6 +2984,7 @@ else:
                         try:
                             supabase.table("employees").update({"password": new_p1}).eq("id", emp["id"]).execute()
                             st.session_state.user["password"] = new_p1
+                            st.toast("✅ Password updated successfully!")
                             st.success("Password updated successfully!")
                         except Exception as e:
                             st.error(f"Error updating password: {e}")
