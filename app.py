@@ -82,7 +82,8 @@ STANDARD_SHIFTS = [
     "General Shift (08:30 AM - 05:00 PM | 8.5 hrs)",
     "Morning Shift (06:00 AM - 02:30 PM | 8.5 hrs)",
     "Evening Shift (02:00 PM - 10:30 PM | 8.5 hrs)",
-    "Night Shift (10:00 PM - 06:30 AM | 8.5 hrs)"
+    "Night Shift (10:00 PM - 06:30 AM | 8.5 hrs)",
+    "Rotational / 3 Shifts (Morning / Evening / Night | 8.5 hrs)"
 ]
 
 def get_entity_logo(entity_name):
@@ -500,9 +501,11 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     story.append(p_center_head)
     story.append(Spacer(1, 10))
 
-    doj_val = str(emp_data.get("joining_date") or "")
+    doj_val = str(emp_data.get("joining_date") or emp_data.get("created_at") or "")
     if "T" in doj_val:
         doj_val = doj_val.split("T")[0]
+
+    aadhar_print = str(emp_data.get("aadhar_number") or "N/A")
 
     emp_info_data = [
         ["Emp. Code:", str(emp_data.get("employee_code", "N/A")), "Paid Days:", str(att_summary.get("paid_days", 0))],
@@ -510,7 +513,7 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
         ["Designation:", str(emp_data.get("designation", "Staff")), "Bank Name:", str(emp_data.get("bank_name", "N/A"))],
         ["Client Site:", str(client_name), "Bank A/c No.:", str(emp_data.get("bank_account_no", "N/A"))],
         ["DOJ:", doj_val, "PAN No.:", str(emp_data.get("pan_number", "N/A"))],
-        ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", "[Aadhaar Redacted]"]
+        ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", aadhar_print]
     ]
     t_emp = Table(emp_info_data, colWidths=[95, 185, 95, 187])
     t_emp.setStyle(TableStyle([
@@ -674,7 +677,7 @@ if not st.session_state.user:
             c_acc = col_right.text_input("Bank Account Number")
             c_ifsc = col_right.text_input("IFSC Code")
             c_pan = col_right.text_input("PAN Number")
-            c_aadhar = col_right.text_input("Aadhaar Number *", type="password")
+            c_aadhar = col_right.text_input("Aadhaar Number *")
 
             st.write("---")
             st.write("#### Document Attachments (Mandatory - max 200MB)")
@@ -706,7 +709,8 @@ if not st.session_state.user:
                         "pan_number": c_pan,
                         "aadhar_number": c_aadhar,
                         "role": "employee", 
-                        "status": "PENDING_SUPERVISOR"
+                        "status": "PENDING_SUPERVISOR",
+                        "joining_date": str(date.today())
                     }
                     try:
                         supabase.table("employees").insert(new_candidate).execute()
@@ -805,9 +809,10 @@ else:
                     me_cat = m1.selectbox("Category", ["Skilled", "Semi-Skilled", "Unskilled"], index=1)
                     me_shift_timing = m2.selectbox("Assigned Shift Schedule *", STANDARD_SHIFTS)
                     me_wo_day = m3.selectbox("Weekly Off (WO) Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0)
-                    me_ot_rate = m1.number_input("Custom OT Rate / Hour (Leave 0 to use Salary Structure)", min_value=0.0, step=10.0, value=0.0)
-                    me_pwd = m2.text_input("Portal Password", type="password")
-                    me_aadhar = m3.text_input("Aadhaar Number *")
+                    me_joining_date = m1.date_input("Joining Date *", value=date.today(), format="DD/MM/YYYY")
+                    me_ot_rate = m2.number_input("Custom OT Rate / Hour (Leave 0 to use Salary Structure)", min_value=0.0, step=10.0, value=0.0)
+                    me_pwd = m3.text_input("Portal Password", type="password")
+                    me_aadhar = m1.text_input("Aadhaar Number *")
 
                     st.write("##### 2. Organization Assignment & Statutory Numbers")
                     m4, m5 = st.columns(2)
@@ -842,7 +847,7 @@ else:
                                     "uan_number": me_uan, "esic_number": me_esic, "pan_number": me_pan, "aadhar_number": me_aadhar,
                                     "bank_name": me_bank, "bank_branch": me_branch, "bank_account_no": me_acc,
                                     "ifsc_code": me_ifsc, "role": "employee", "status": "APPROVED",
-                                    "joining_date": str(date.today())
+                                    "joining_date": str(me_joining_date)
                                 }).execute()
                                 st.cache_data.clear()
                                 st.success(f"Employee {me_name} registered successfully!")
@@ -887,7 +892,11 @@ else:
                         wo_idx = wo_options.index(curr_wo) if curr_wo in wo_options else 0
                         up_wo = asg4.selectbox("Weekly Off Day", wo_options, index=wo_idx)
 
-                        up_ot_rate = asg5.number_input("Custom OT Rate / Hour (Rs.)", min_value=0.0, step=10.0, value=float(curr_selected.get("ot_rate_per_hour") or 0.0))
+                        raw_curr_join = curr_selected.get("joining_date") or curr_selected.get("created_at")
+                        def_join_dt = datetime.strptime(str(raw_curr_join).split("T")[0], "%Y-%m-%d").date() if raw_curr_join else date.today()
+                        up_join_date = asg5.date_input("Joining Date *", value=def_join_dt, format="DD/MM/YYYY")
+
+                        up_ot_rate = asg3.number_input("Custom OT Rate / Hour (Rs.)", min_value=0.0, step=10.0, value=float(curr_selected.get("ot_rate_per_hour") or 0.0))
 
                         st.write("##### 3. Personal Information")
                         ed1, ed2, ed3 = st.columns(3)
@@ -927,6 +936,7 @@ else:
                                 "employee_code": up_code, "user_id": up_uid, "password": up_pwd,
                                 "entity_id": e_map.get(up_ent), "client_id": c_map.get(up_cli),
                                 "shift_timing": up_shift, "weekly_off_day": up_wo,
+                                "joining_date": str(up_join_date),
                                 "ot_rate_per_hour": up_ot_rate if up_ot_rate > 0 else None,
                                 "full_name": up_name, "father_name": up_father, "gender": up_gender,
                                 "dob": str(up_dob), "phone_number": up_phone, "emergency_contact": up_emg,
@@ -1013,6 +1023,10 @@ else:
                         sel_shift = app2.selectbox("Confirm Shift Timing *", STANDARD_SHIFTS, key=f"shift_{cand['id']}")
                         sel_wo = app1.selectbox("Confirm Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key=f"wo_{cand['id']}")
 
+                        raw_c_join = cand.get("joining_date") or cand.get("created_at")
+                        def_cand_join = datetime.strptime(str(raw_c_join).split("T")[0], "%Y-%m-%d").date() if raw_c_join else date.today()
+                        set_join_date = app2.date_input("Confirm Joining Date *", value=def_cand_join, format="DD/MM/YYYY", key=f"c_join_{cand['id']}")
+
                         col_act1, col_act2 = st.columns(2)
                         if col_act1.button("Approve & Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
                             supabase.table("employees").update({
@@ -1025,6 +1039,7 @@ else:
                                 "weekly_off_day": sel_wo,
                                 "shift_hours": 8.5,
                                 "shift_timing": sel_shift,
+                                "joining_date": str(set_join_date),
                                 "entity_id": selected_ent.get("id", cand.get("entity_id"))
                             }).eq("id", cand["id"]).execute()
                             
@@ -1168,7 +1183,10 @@ else:
                     sel_e = at1.selectbox("Select Employee", options=list(emp_map.keys()) if emp_map else ["No Employees"])
                     sel_d = at2.date_input("Date", value=date.today())
                     sel_st = at3.selectbox("Status", ["P (Present)", "A (Absent)", "WO (Week Off)", "PH (Paid Holiday)"])
-                    ot_h = at1.number_input("Overtime Hours (OT)", min_value=0.0, max_value=16.0, step=0.5, value=0.0)
+                    
+                    at4, at5 = st.columns(2)
+                    sel_shift_worked = at4.selectbox("Shift Worked", STANDARD_SHIFTS)
+                    ot_h = at5.number_input("Overtime Hours (OT)", min_value=0.0, max_value=16.0, step=0.5, value=0.0)
 
                     if st.form_submit_button("Save / Update Attendance", type="primary"):
                         if emp_map:
@@ -1228,14 +1246,12 @@ else:
                     o_pay = float(sal_struct.get("other_allowance", 813.0)) if sal_struct else 813.0
                     rate_total_wages = b_pay + d_pay + h_pay + o_pay
                     
-                    # Custom employee OT rate if set, otherwise from salary structure
                     emp_custom_ot = emp_item.get("ot_rate_per_hour")
                     if emp_custom_ot and float(emp_custom_ot) > 0:
                         ot_rate = float(emp_custom_ot)
                     else:
                         ot_rate = float(sal_struct.get("ot_rate_per_hour", 120.0)) if sal_struct else 120.0
 
-                    # NO DUMMY DATA: Read only actual records from attendance table
                     p_cnt = 0.0
                     ph_cnt = 0.0
                     ot_hours_total = 0.0
@@ -1999,7 +2015,10 @@ else:
                         s_desig = v_col1.text_input("Assign Designation *", value=c.get("designation") or "Associate", key=f"desig_{c['id']}")
                         s_shift = v_col2.selectbox("Assign Shift Schedule *", STANDARD_SHIFTS, key=f"shift_{c['id']}")
 
-                        s_join_date = v_col1.date_input("Assign Joining Date *", value=date.today(), key=f"join_{c['id']}")
+                        raw_c_join = c.get("joining_date") or c.get("created_at")
+                        def_join_val = datetime.strptime(str(raw_c_join).split("T")[0], "%Y-%m-%d").date() if raw_c_join else date.today()
+                        s_join_date = v_col1.date_input("Assign Joining Date *", value=def_join_val, format="DD/MM/YYYY", key=f"join_{c['id']}")
+                        
                         s_wo = v_col2.selectbox("Assign Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], index=0, key=f"wo_{c['id']}")
 
                         st.write("---")
@@ -2207,7 +2226,7 @@ else:
         selected_emp_panel = st.session_state.active_emp_tab
         st.title(selected_emp_panel)
 
-        # 1. PUNCH PANEL (Strict 15m Geofence)
+        # 1. PUNCH PANEL (Strict 15m Geofence & Browser Permission Fix)
         if selected_emp_panel == "Daily Punch (Geofenced)":
             st.subheader("Daily Attendance Punch")
 
@@ -2232,11 +2251,12 @@ else:
                 st.stop()
 
             scheduled_shift_hours = float(emp.get("shift_hours") or 8.5)
+            assigned_shift_name = emp.get("shift_timing") or "General Shift"
 
             st.markdown(f"""
             <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
                 <h4 style="margin: 0 0 8px 0; color: #0F172A;">Assigned Location: <b>{plant_name}</b></h4>
-                <p style="margin: 0; color: #64748B; font-size: 14px;">Shift Requirement: <b>{scheduled_shift_hours:.1f} Hours</b> | Security perimeter: Strict 15-meter geofenced radius active.</p>
+                <p style="margin: 0; color: #64748B; font-size: 14px;">Shift Schedule: <b>{assigned_shift_name}</b> ({scheduled_shift_hours:.1f} Hours) | Security perimeter: Strict 15-meter geofenced radius active.</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -2247,24 +2267,31 @@ else:
             except Exception:
                 att_check = []
 
+            # Permission fix with geolocation query param sync
             st.components.v1.html("""
+            <div id="gps-status" style="font-family:sans-serif; font-size:12px; color:#64748B;">Detecting GPS location...</div>
             <script>
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-                    const url = new URL(window.parent.location.href);
-                    if (url.searchParams.get("device_lat") !== lat.toString() || url.searchParams.get("device_lon") !== lon.toString()) {
-                        url.searchParams.set("device_lat", lat);
-                        url.searchParams.set("device_lon", lon);
-                        window.parent.history.replaceState({}, '', url.toString());
-                    }
-                }, function(error) {
-                    console.log("GPS Location error: " + error.message);
-                }, {enableHighAccuracy: true});
+            function updateLocation() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function(position) {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        document.getElementById("gps-status").innerText = "GPS Connected (Lat: " + lat.toFixed(4) + ", Lon: " + lon.toFixed(4) + ")";
+                        const url = new URL(window.parent.location.href);
+                        if (url.searchParams.get("device_lat") !== lat.toString() || url.searchParams.get("device_lon") !== lon.toString()) {
+                            url.searchParams.set("device_lat", lat);
+                            url.searchParams.set("device_lon", lon);
+                            window.parent.history.replaceState({}, '', url.toString());
+                        }
+                    }, function(error) {
+                        document.getElementById("gps-status").innerHTML = "<span style='color:red;'>GPS Permission Denied. Please click the lock icon in the address bar and Allow Location.</span>";
+                    }, {enableHighAccuracy: true, timeout: 10000, maximumAge: 0});
+                }
             }
+            updateLocation();
+            setInterval(updateLocation, 5000);
             </script>
-            """, height=0)
+            """, height=35)
 
             raw_dev_lat = st.query_params.get("device_lat")
             raw_dev_lon = st.query_params.get("device_lon")
@@ -2355,6 +2382,10 @@ else:
                     if cl_info: cl_name = cl_info[0].get("name")
                 except Exception: pass
 
+            raw_j_dt = emp.get("joining_date") or emp.get("created_at") or "Not Set"
+            display_joining = str(raw_j_dt).split("T")[0]
+            display_shift = emp.get("shift_timing") or "General Shift"
+
             p_col1, p_col2 = st.columns(2)
             with p_col1:
                 st.markdown(f"""
@@ -2368,6 +2399,8 @@ else:
                     <b>Emergency Contact:</b> {emp.get('emergency_contact', 'N/A')}<br/>
                     <b>Designation:</b> {emp.get('designation', 'Associate')}<br/>
                     <b>Client Site:</b> {cl_name}<br/>
+                    <b>Assigned Shift:</b> {display_shift}<br/>
+                    <b>Date of Joining:</b> {display_joining}<br/>
                     <b>Weekly Off Day:</b> {emp.get('weekly_off_day', 'Sunday')}<br/>
                     <b>Marital Status:</b> {emp.get('marital_status', 'Single')}
                 </div>
@@ -2380,7 +2413,7 @@ else:
                     <b>UAN Number:</b> {emp.get('uan_number', 'N/A')}<br/>
                     <b>ESIC Number:</b> {emp.get('esic_number', 'N/A')}<br/>
                     <b>PAN Number:</b> {emp.get('pan_number', 'N/A')}<br/>
-                    <b>Aadhaar Number:</b> [Aadhaar Redacted]<br/>
+                    <b>Aadhaar Number:</b> {str(emp.get('aadhar_number') or 'N/A')}<br/>
                     <b>Bank Name:</b> {emp.get('bank_name', 'N/A')} ({emp.get('bank_branch', 'Main')})<br/>
                     <b>Account No:</b> {emp.get('bank_account_no', 'N/A')}<br/>
                     <b>IFSC Code:</b> {emp.get('ifsc_code', 'N/A')}
@@ -2704,9 +2737,9 @@ else:
                 e_ot = round(ot_hrs * ot_rate, 2)
                 t_gross = e_basic + e_da + e_hra + e_other + e_ot
 
-                pf_d = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
-                esic_d = round(t_gross * 0.0075, 2)
-                pt_d = 200.0 if t_gross > 10000 else 0.0
+                pf_ded = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
+                esic_ded = round(t_gross * 0.0075, 2)
+                pt_ded = 200.0 if t_gross > 10000 else 0.0
 
                 adv_d = 0.0
                 try:
@@ -2724,7 +2757,7 @@ else:
 
                 deductions_payload = {
                     'earned_basic': e_basic, 'earned_da': e_da, 'earned_hra': e_hra, 'earned_other': e_other,
-                    'ot_amount': e_ot, 'pf_ded': pf_d, 'esic_ded': esic_d, 'pt_ded': pt_d,
+                    'ot_amount': e_ot, 'pf_ded': pf_ded, 'esic_ded': esic_ded, 'pt_ded': pt_ded,
                     'adv_val': adv_d, 'ppe_ded': ppe_d
                 }
                 att_summary_payload = {'paid_days': p_days, 'total_days': p_days, 'ot_hours': ot_hrs}
