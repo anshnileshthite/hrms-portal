@@ -39,23 +39,23 @@ def fetch_cached_employees():
     except Exception:
         return []
 
-# Custom CSS Styling
+# Custom CSS Styling with Colorful Touch, Icons & Clean Padding
 st.markdown("""
     <style>
-    .main-title { font-size: 24px; font-weight: 700; color: #1E293B; margin-bottom: 12px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
-    .stTabs [data-baseweb="tab"] { font-size: 14px; color: #64748B; padding: 6px 0px; }
-    .stTabs [aria-selected="true"] { color: #EF4444 !important; border-bottom-color: #EF4444 !important; font-weight: bold; }
-    .submit-red-btn button { background-color: #EF4444 !important; color: white !important; font-weight: 600; width: 100%; border: none; border-radius: 4px; padding: 10px; }
-    .sidebar-brand { font-size: 19px; font-weight: bold; color: #0F172A; }
-    .logged-badge { color: #059669; font-weight: bold; font-size: 13px; margin-bottom: 15px; }
-    .stButton>button { width: 100%; border-radius: 4px; text-align: left; }
-    .profile-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 14px; margin-bottom: 15px; }
+    .main-title { font-size: 26px; font-weight: 750; color: #0F172A; margin-bottom: 12px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
+    .stTabs [data-baseweb="tab"] { font-size: 14px; color: #475569; padding: 8px 12px; font-weight: 600; }
+    .stTabs [aria-selected="true"] { color: #DC2626 !important; border-bottom-color: #DC2626 !important; font-weight: bold; background-color: #FEF2F2; border-radius: 4px; }
+    .submit-red-btn button { background-color: #DC2626 !important; color: white !important; font-weight: 600; width: 100%; border: none; border-radius: 6px; padding: 10px; }
+    .sidebar-brand { font-size: 20px; font-weight: bold; color: #1E293B; display: flex; align-items: center; gap: 8px; }
+    .logged-badge { color: #10B981; font-weight: bold; font-size: 13px; margin-bottom: 15px; background-color: #ECFDF5; padding: 4px 8px; border-radius: 4px; border: 1px solid #A7F3D0; }
+    .stButton>button { width: 100%; border-radius: 6px; text-align: left; font-weight: 500; }
+    .profile-card { background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%); border: 1px solid #CBD5E1; border-radius: 8px; padding: 16px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
     </style>
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# PERSISTENT SESSION HANDLING
+# PERSISTENT SESSION & DEVICE BINDING HANDLING
 # -------------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -76,7 +76,7 @@ if st.session_state.user is None:
                 pass
 
 if "active_admin_tab" not in st.session_state:
-    st.session_state.active_admin_tab = "Dashboard Overview"
+    st.session_state.active_admin_tab = "📊 Dashboard Overview"
 
 STANDARD_SHIFTS = [
     "General Shift (08:30 AM - 05:00 PM | 8.5 hrs)",
@@ -219,7 +219,6 @@ The details of your salary bifurcation are as below -"""
     other = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
     gross = basic + da + hra + other
 
-    # Rule: Max ₹1,800 on Basic+DA
     ee_pf = min(round((basic + da) * 0.12, 2), 1800.0)
     pt = float(sal_rule.get("pt_amount", 200.0)) if sal_rule else 200.0
     ee_esic = round(gross * 0.0075, 2)
@@ -305,7 +304,6 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     c_addr = client_obj.get("plant_location", "Plot No-D-1, MIDC Chakan, Industrial Area Phase-II, Village Bhamboli Tal-Khed, Dist: Pune - 410501") if client_obj else "Plot No-D-1, MIDC Chakan, Industrial Area Phase-II, Village Bhamboli Tal-Khed, Dist: Pune - 410501"
     c_gst = client_obj.get("gst_number", "27AACCD4599E1ZH") if client_obj else "27AACCD4599E1ZH"
 
-    # Consignee Details
     cons_name = inv_data.get("consignee_name") or c_name
     cons_addr = inv_data.get("consignee_address") or c_addr
     cons_gst = inv_data.get("consignee_gstin") or c_gst
@@ -421,7 +419,6 @@ def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     decl = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the services described and that all particulars are true and correct."
     bank_d = f"<b>Company Bank Account Details:</b><br/>BANK: {b_name}<br/>A/C NO: {b_acc}<br/>IFSC: {b_ifsc}"
     
-    # Stamp & Signature auto attachment
     stamp_f, sig_f = get_entity_assets(code_pref)
     sign_elements = [Paragraph(f"<b>for {e_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
     
@@ -464,7 +461,6 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     entity_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
     ent_addr = entity_obj.get("address", "A/p: Nimgaon tal-khed, Dist-pune") if entity_obj else "A/p: Nimgaon tal-khed, Dist-pune"
 
-    # Centered Header: Title -> Entity Name -> Address
     header_html = f"""<font size=13><b>SALARY SLIP FOR THE MONTH OF {month_str.upper()}</b></font><br/>
     <font size=11><b>{entity_name}</b></font><br/>
     <font size=8 color='#475569'>{ent_addr}</font>"""
@@ -473,7 +469,6 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     story.append(p_center_head)
     story.append(Spacer(1, 10))
 
-    # Employee Information
     doj_val = str(emp_data.get("joining_date") or "")
     if "T" in doj_val:
         doj_val = doj_val.split("T")[0]
@@ -484,7 +479,7 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
         ["Designation:", str(emp_data.get("designation", "Staff")), "Bank Name:", str(emp_data.get("bank_name", "N/A"))],
         ["Client Site:", str(client_name), "Bank A/c No.:", str(emp_data.get("bank_account_no", "N/A"))],
         ["DOJ:", doj_val, "PAN No.:", str(emp_data.get("pan_number", "N/A"))],
-        ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", str(emp_data.get("aadhar_number") or "[Aadhaar Redacted]")]
+        ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", "[Aadhaar Redacted]"]
     ]
     t_emp = Table(emp_info_data, colWidths=[95, 185, 95, 187])
     t_emp.setStyle(TableStyle([
@@ -499,7 +494,6 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     story.append(t_emp)
     story.append(Spacer(1, 8))
 
-    # Earnings & Deductions
     rate_basic = float(sal_rule.get("basic", 0.0)) if sal_rule else 0.0
     rate_da = float(sal_rule.get("da", 0.0)) if sal_rule else 0.0
     rate_hra = float(sal_rule.get("hra", 0.0)) if sal_rule else 0.0
@@ -544,7 +538,6 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     ]))
     story.append(t_calc)
 
-    # Net Salary
     t_net = Table([["Net Salary", f"Rs. {net_salary:,.2f}"]], colWidths=[280, 282])
     t_net.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
@@ -558,7 +551,6 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
     ]))
     story.append(t_net)
 
-    # In words & Note
     t_words = Table([
         [Paragraph(f"<b>Amount in Words:</b> <b>{num_to_words(net_salary)}</b>", styles["Normal"])],
         [Paragraph("<b>Remarks:</b> Salary calculated based on monthly attendance muster.", styles["Normal"])],
@@ -580,19 +572,19 @@ def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_ru
 # 3. PUBLIC INTERFACE
 # =============================================================================
 if not st.session_state.user:
-    st.markdown('<div class="main-title">ESS PORTAL</div>', unsafe_allow_html=True)
-    tab_signin, tab_join = st.tabs(["Sign In", "Candidate Paperless Joining Form"])
+    st.markdown('<div class="main-title">🔐 ESS PORTAL - Login</div>', unsafe_allow_html=True)
+    tab_signin, tab_join = st.tabs(["🔑 Sign In", "📝 Candidate Paperless Joining Form"])
 
     with tab_signin:
         col_s1, col_login, col_s2 = st.columns([1, 1.8, 1])
         with col_login:
             st.write(" ")
-            role_choice = st.selectbox("Login Portal", ["Employee (ESS)", "Admin Portal", "Supervisor Portal", "Client Desk"])
-            u_id = st.text_input("User ID / Employee Code")
-            u_pwd = st.text_input("Password", type="password")
+            role_choice = st.selectbox("👤 Login Portal", ["Employee (ESS)", "Admin Portal", "Supervisor Portal", "Client Desk"])
+            u_id = st.text_input("🆔 User ID / Employee Code")
+            u_pwd = st.text_input("🔑 Password", type="password")
             
             st.markdown('<div class="submit-red-btn">', unsafe_allow_html=True)
-            if st.button("Access Dashboard", key="access_btn"):
+            if st.button("🚀 Access Dashboard", key="access_btn"):
                 role_map = {"Employee (ESS)": "employee", "Admin Portal": "admin", "Supervisor Portal": "supervisor", "Client Desk": "client"}
                 target_role = role_map[role_choice]
                 
@@ -605,45 +597,57 @@ if not st.session_state.user:
                 try:
                     res = supabase.table("employees").select("*").eq("user_id", u_id).eq("password", u_pwd).eq("role", target_role).execute()
                     if res.data:
-                        st.session_state.user = res.data[0]
+                        emp_rec = res.data[0]
+                        # Device Binding Check for Employees
+                        if target_role == "employee":
+                            dev_id = st.query_params.get("device_id") or "default_browser_device"
+                            reg_dev = emp_rec.get("device_binding_id")
+                            if reg_dev and reg_dev != dev_id:
+                                st.error("⛔ Security Error: This account is locked to another mobile device. Contact Admin to reset.")
+                                st.stop()
+                            elif not reg_dev:
+                                supabase.table("employees").update({"device_binding_id": dev_id}).eq("id", emp_rec["id"]).execute()
+                                emp_rec["device_binding_id"] = dev_id
+
+                        st.session_state.user = emp_rec
                         st.query_params["session_user_id"] = str(u_id)
                         st.query_params["session_role"] = str(target_role)
                         st.rerun()
                     else:
-                        st.error("Invalid Credentials or Login Role!")
+                        st.error("❌ Invalid Credentials or Login Role!")
                 except Exception as e:
                     st.error(f"Authentication Error: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
 
     with tab_join:
-        st.write("#### Candidate Paperless Onboarding Form")
+        st.write("#### 📝 Candidate Paperless Onboarding Form")
         with st.form("onboard_candidate_form", clear_on_submit=True):
             col_left, col_right = st.columns(2)
-            c_name = col_left.text_input("Candidate Full Name *")
-            c_father = col_left.text_input("Father's Name *")
-            c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
-            c_dob = col_left.date_input("Date of Birth (DOB) *", min_value=date(1960, 1, 1), max_value=date(2010, 1, 1), value=date(1998, 1, 1))
-            c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
-            c_phone = col_left.text_input("Employee Mobile Number *")
-            c_emergency = col_left.text_input("Emergency Contact Number *")
+            c_name = col_left.text_input("👤 Candidate Full Name *")
+            c_father = col_left.text_input("👨‍👦 Father's Name *")
+            c_gender = col_left.selectbox("⚧ Gender *", ["Male", "Female", "Other"])
+            c_dob = col_left.date_input("🎂 Date of Birth (DOB) *", min_value=date(1960, 1, 1), max_value=date(2010, 1, 1), value=date(1998, 1, 1))
+            c_marital = col_left.selectbox("💍 Marital Status", ["Single", "Married"])
+            c_phone = col_left.text_input("📱 Employee Mobile Number *")
+            c_emergency = col_left.text_input("📞 Emergency Contact Number *")
 
-            c_uan = col_right.text_input("UAN Number")
-            c_esic = col_right.text_input("ESIC Number")
-            c_bank = col_right.text_input("Bank Name")
-            c_branch = col_right.text_input("Bank Branch Name")
-            c_acc = col_right.text_input("Bank Account Number")
-            c_ifsc = col_right.text_input("IFSC Code")
-            c_pan = col_right.text_input("PAN Number")
-            c_aadhar = col_right.text_input("Aadhaar Number *", type="password")
+            c_uan = col_right.text_input("🔢 UAN Number")
+            c_esic = col_right.text_input("🔢 ESIC Number")
+            c_bank = col_right.text_input("🏦 Bank Name")
+            c_branch = col_right.text_input("🏦 Bank Branch Name")
+            c_acc = col_right.text_input("💳 Bank Account Number")
+            c_ifsc = col_right.text_input("🔤 IFSC Code")
+            c_pan = col_right.text_input("🪪 PAN Number")
+            c_aadhar = col_right.text_input("🪪 Aadhaar Number *", type="password")
 
             st.write("---")
-            st.write("#### Document Attachments (Mandatory - max 200MB)")
-            up_photo = col_left.file_uploader("Passport Size Photo", type=["jpg", "png"])
-            up_aadhar = col_right.file_uploader("Aadhaar Card Copy", type=["pdf", "jpg", "png"])
-            up_pan = col_left.file_uploader("PAN Card Copy", type=["pdf", "jpg", "png"])
-            up_bank = col_right.file_uploader("Bank Passbook / Cheque", type=["pdf", "jpg", "png"])
+            st.write("#### 📁 Document Attachments (Mandatory - max 200MB)")
+            up_photo = col_left.file_uploader("📸 Passport Size Photo", type=["jpg", "png"])
+            up_aadhar = col_right.file_uploader("🪪 Aadhaar Card Copy", type=["pdf", "jpg", "png"])
+            up_pan = col_left.file_uploader("🪪 PAN Card Copy", type=["pdf", "jpg", "png"])
+            up_bank = col_right.file_uploader("🏦 Bank Passbook / Cheque", type=["pdf", "jpg", "png"])
 
-            if st.form_submit_button("Submit Onboarding Application"):
+            if st.form_submit_button("📤 Submit Onboarding Application"):
                 if not c_name or not c_phone:
                     st.error("Mandatory fields (*) are required!")
                 else:
@@ -685,15 +689,15 @@ else:
     # -------------------------------------------------------------------------
     if active_role == "admin":
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
-            st.markdown('<div class="logged-badge">Logged In: ADMIN</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">🛡️ HRMS Admin</div>', unsafe_allow_html=True)
+            st.markdown('<div class="logged-badge">🟢 Logged In: ADMIN</div>', unsafe_allow_html=True)
             st.caption("ADMIN DESK")
 
             admin_tabs = [
-                "Dashboard Overview", "Employee Master & Docs", "Candidate Approvals",
-                "Salary Structure Rules", "Attendance & OT Live Edit", "Monthly Payroll Processing",
-                "Advance / Loan Desk", "PPE & Uniform Tracker", "Client Billing & Invoices",
-                "Company & Plant Locations", "User Roles & Access"
+                "📊 Dashboard Overview", "👥 Employee Master & Docs", "✅ Candidate Approvals",
+                "💰 Salary Structure Rules", "⏰ Attendance & OT Live Edit", "📑 Monthly Payroll Processing",
+                "💸 Advance / Loan Desk", "🦺 PPE & Uniform Tracker", "🧾 Client Billing & Invoices",
+                "🏢 Company & Plant Locations", "🔑 User Roles & Access", "📱 Device Binding Reset"
             ]
 
             for at in admin_tabs:
@@ -703,7 +707,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("Logout", key="adm_logout"):
+            if st.button("🚪 Logout", key="adm_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -711,8 +715,7 @@ else:
         selected_panel = st.session_state.active_admin_tab
         st.title(selected_panel)
 
-        # 1. Dashboard Overview
-        if selected_panel == "Dashboard Overview":
+        if selected_panel == "📊 Dashboard Overview":
             st.subheader("Workforce Deployment Matrix (Client-Wise per Entity)")
             ent_res = fetch_cached_entities()
             cli_res = fetch_cached_clients()
@@ -721,7 +724,7 @@ else:
             if ent_res:
                 for ent in ent_res:
                     st.markdown(f"#### 🏢 Entity: **{ent['name']}**")
-                    ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status") == "APPROVED"]
+                    ent_emps = [e for e in emp_res if e.get("entity_id") == ent["id"] and e.get("status"] == "APPROVED"]
                     matched_clients = [c for c in cli_res if c.get("entity_id") == ent["id"]]
                     if matched_clients:
                         cols = st.columns(max(len(matched_clients), 1))
@@ -734,8 +737,7 @@ else:
             else:
                 st.info("No entities configured yet.")
 
-        # 2. Employee Master & Docs
-        elif selected_panel == "Employee Master & Docs":
+        elif selected_panel == "👥 Employee Master & Docs":
             st.subheader("Employee Master Management & Document Vault")
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
@@ -804,9 +806,6 @@ else:
                             except Exception as e:
                                 st.error(f"Error saving employee: {e}")
 
-            # -------------------------------------------------------------
-            # EDIT / DELETE EMPLOYEE (FULL CRUD WITH ALL FIELDS)
-            # -------------------------------------------------------------
             with tab_edit_emp:
                 all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if all_emps:
@@ -930,8 +929,29 @@ else:
                         f_bnk = st.file_uploader("Upload Bank Passbook / Cheque", type=["pdf", "jpg", "png"], key=f"vault_bnk_{curr_emp['id']}")
                         if f_bnk: st.success("✅ Data Updated Successfully: Bank Details updated!")
 
-        # 3. Company & Plant Locations
-        elif selected_panel == "Company & Plant Locations":
+        elif selected_panel == "📱 Device Binding Reset":
+            st.subheader("📱 Employee Mobile Device Binding & Reset Management")
+            st.info("Here Admin can reset the registered device ID/IP for employees if they switch mobile phones.")
+            
+            all_bound_emps = supabase.table("employees").select("id, employee_code, full_name, phone_number, device_binding_id").eq("role", "employee").execute().data or []
+            if all_bound_emps:
+                emp_bind_map = {f"[{e.get('employee_code')}] {e['full_name']} (Phone: {e.get('phone_number')})": e for e in all_bound_emps}
+                sel_b_emp = st.selectbox("Select Employee to Reset Device Lock", list(emp_bind_map.keys()))
+                target_emp = emp_bind_map[sel_b_emp]
+                
+                st.write(f"**Current Bound Device ID:** `{target_emp.get('device_binding_id') or 'Not Bound / First Login Pending'}`")
+                
+                if st.button("🔄 Reset / Unlink Mobile Device Binding", type="primary"):
+                    try:
+                        supabase.table("employees").update({"device_binding_id": None}).eq("id", target_emp["id"]).execute()
+                        st.success(f"✅ Device binding successfully reset for {target_emp['full_name']}! Now they can login from a new phone.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error resetting device binding: {e}")
+            else:
+                st.info("No employee records found.")
+
+        elif selected_panel == "🏢 Company & Plant Locations":
             loc1, loc2 = st.columns(2)
             with loc1:
                 st.subheader("1. Entity / Firm Master")
@@ -1103,8 +1123,7 @@ else:
                             except Exception as e:
                                 st.error(f"Error saving PH: {e}")
 
-        # 4. Salary Structure Rules
-        elif selected_panel == "Salary Structure Rules":
+        elif selected_panel == "💰 Salary Structure Rules":
             st.subheader("Configure Salary Structure & CTC Rules")
             tab_sal_add, tab_sal_edit = st.tabs(["➕ Define Salary Rule", "✏️ Edit / Delete Salary Rule"])
             ent_list = fetch_cached_entities()
@@ -1142,7 +1161,6 @@ else:
                     r_er_esic = er2.number_input("Employer ESIC (%)", value=3.25)
                     r_bonus = er3.number_input("Bonus (₹)", value=0.0)
 
-                    # EPF ceiling logic
                     er_pf_val = min(round((r_basic + r_da) * (r_er_pf / 100.0), 2), 1950.0)
                     er_esic_val = round(gross * (r_er_esic / 100.0), 2)
                     m_ctc = round(gross + er_pf_val + er_esic_val + r_bonus, 2)
@@ -1213,8 +1231,7 @@ else:
                             st.warning("🗑️ Data Deleted Successfully: Salary rule removed!")
                             st.rerun()
 
-        # 5. PPE & UNIFORM TRACKER
-        elif selected_panel == "PPE & Uniform Tracker":
+        elif selected_panel == "🦺 PPE & Uniform Tracker":
             st.subheader("PPE & Uniform Tracker (Management Desk)")
             tab_ppe_issue, tab_ppe_edit, tab_ppe_req, tab_ppe_cat = st.tabs([
                 "➕ Issue / Add PPE", 
@@ -1386,8 +1403,7 @@ else:
                     })
                 st.dataframe(pd.DataFrame(formatted_ppe_rows), use_container_width=True)
 
-        # 6. MONTHLY PAYROLL PROCESSING (Full 35+ Column Format)
-        elif selected_panel == "Monthly Payroll Processing":
+        elif selected_panel == "📑 Monthly Payroll Processing":
             st.subheader("Monthly Payroll Engine & Wage Sheet (Full Statutory Format)")
 
             p_col1, p_col2 = st.columns(2)
@@ -1461,7 +1477,6 @@ else:
                     ot_amount = round(ot_hours_total * ot_rate, 2)
                     total_gross = round(earned_wages + ot_amount, 2)
 
-                    # EPF Max ₹1,800 Ceiling Rule on Basic + DA
                     basic_plus_da = earned_basic + earned_da
                     if basic_plus_da > 15000:
                         pf_ded = 1800.0
@@ -1471,7 +1486,6 @@ else:
                     esic_ded = round(total_gross * 0.0075, 2)
                     pt_ded = 200.0 if total_gross > 10000 else 0.0
 
-                    # Advance Check
                     adv_val = 0.0
                     try:
                         adv_recs = supabase.table("advance_salaries").select("amount").eq("employee_id", emp_item["id"]).eq("status", "APPROVED").execute().data or []
@@ -1479,7 +1493,6 @@ else:
                     except Exception: 
                         pass
 
-                    # PPE / Uniform Deduction Fetch
                     ppe_ded = 0.0
                     try:
                         ppe_recs = supabase.table("ppe_records").select("cost").eq("employee_id", emp_item["id"]).eq("deduction_month", sel_month).eq("status", "APPROVED").execute().data or []
@@ -1487,11 +1500,9 @@ else:
                     except Exception:
                         pass
 
-                    # Total Deductions (Advance + PPE)
                     total_deductions = pf_ded + esic_ded + pt_ded + adv_val + ppe_ded
                     net_take_home = round(total_gross - total_deductions, 2)
 
-                    # Employer Contributions & CTC
                     if basic_plus_da > 15000:
                         pf_er = 1950.0
                     else:
@@ -1582,8 +1593,7 @@ else:
             else:
                 st.info("No approved employees found for the selected entity filter.")
 
-        # 7. CLIENT BILLING & INVOICES (With Full Field Manual Entry)
-        elif selected_panel == "Client Billing & Invoices":
+        elif selected_panel == "🧾 Client Billing & Invoices":
             st.subheader("Client Billing & Tax Invoice Generator (Exact Replica)")
             t_inv_gen, t_inv_hist = st.tabs(["➕ Generate Tax Invoice", "📑 Invoices History & Downloads"])
             cli_list = fetch_cached_clients()
@@ -1654,8 +1664,7 @@ else:
                 else:
                     st.info("No tax invoices generated yet.")
 
-        # 8. ADVANCE / LOAN DESK
-        elif selected_panel == "Advance / Loan Desk":
+        elif selected_panel == "💸 Advance / Loan Desk":
             st.subheader("Salary Advance & Loan Requests")
 
             try:
@@ -1722,8 +1731,7 @@ else:
             else:
                 st.info("No salary advance records found.")
 
-        # 9. Attendance & OT Live Edit
-        elif selected_panel == "Attendance & OT Live Edit":
+        elif selected_panel == "⏰ Attendance & OT Live Edit":
             st.subheader("Manual Attendance, Shift Timings & OT Management")
             at_tab_save, at_tab_del = st.tabs(["📝 Add / Update Attendance Record", "🗑️ Delete Attendance Record"])
             emp_list = fetch_cached_employees()
@@ -1755,8 +1763,7 @@ else:
                             supabase.table("attendance").delete().eq("employee_id", emp_map[d_sel_e]).eq("date", str(d_sel_d)).execute()
                             st.warning(f"🗑️ Data Deleted Successfully: Attendance deleted for {d_sel_d}!")
 
-        # 10. Candidate Approvals (Supervisor Verified -> Admin Login Creation)
-        elif selected_panel == "Candidate Approvals":
+        elif selected_panel == "✅ Candidate Approvals":
             st.subheader("New Candidate Approvals & Login Dispatch (Admin Desk)")
             cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
             if cands:
@@ -1797,7 +1804,6 @@ else:
                             
                             st.cache_data.clear()
                             
-                            # WhatsApp Link Dispatch
                             msg = f"Hello {cand['full_name']}, Welcome! Your ESS Portal login credentials are: User ID: {set_user_id}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
                             encoded_msg = urllib.parse.quote(msg)
                             wa_url = f"https://wa.me/91{cand['phone_number']}?text={encoded_msg}"
@@ -1813,8 +1819,7 @@ else:
             else:
                 st.info("No candidates pending admin approval.")
 
-        # 11. User Roles & Access
-        elif selected_panel == "User Roles & Access":
+        elif selected_panel == "🔑 User Roles & Access":
             st.subheader("User Roles & Access Control")
             t_u_add, t_u_edit = st.tabs(["➕ Create User Access", "✏️ Edit / Delete User Access"])
             cli_re = fetch_cached_clients()
@@ -1873,7 +1878,7 @@ else:
             st.session_state.active_sup_tab = "Candidate Verification"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">🛡️ Supervisor Desk</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">● Logged In: SUPERVISOR</div>', unsafe_allow_html=True)
             st.write(f"Supervisor: **{st.session_state.user.get('full_name')}**")
             st.caption("SUPERVISOR DESK")
@@ -1892,7 +1897,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("Logout", key="sup_logout"):
+            if st.button("🚪 Logout", key="sup_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -2025,7 +2030,7 @@ else:
             st.session_state.active_client_tab = "Plant Workforce Overview"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">🏢 Client Portal</div>', unsafe_allow_html=True)
             st.markdown('<div class="logged-badge">● Logged In: CLIENT DESK</div>', unsafe_allow_html=True)
             st.write(f"Authorized Rep: **{st.session_state.user.get('full_name')}**")
             st.caption("CLIENT PORTAL")
@@ -2044,7 +2049,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("Logout", key="cli_logout"):
+            if st.button("🚪 Logout", key="cli_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -2096,20 +2101,20 @@ else:
             st.session_state.active_emp_tab = "Daily Punch (Geofenced)"
 
         with st.sidebar:
-            st.markdown('<div class="sidebar-brand">HRMS</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="logged-badge">● Logged In: EMPLOYEE ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-brand">📱 ESS Employee Portal</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="logged-badge">● Logged In: ({emp.get("employee_code", "TEMP")})</div>', unsafe_allow_html=True)
             st.write(f"User: **{emp.get('full_name')}**")
             st.caption("ESS PORTAL")
 
             emp_tabs = [
-                "Daily Punch (Geofenced)",
-                "My Profile Details",
-                "Attendance Calendar",
-                "Monthly Payslips (15th)",
-                "Official Documents Vault",
-                "Request PPE Equipment",
-                "Request Salary Advance",
-                "Change Password"
+                "⏱️ Daily Punch",
+                "👤 My Profile",
+                "📅 Attendance",
+                "📄 Payslips",
+                "📁 Documents",
+                "🦺 Request PPE",
+                "💰 Request Advance",
+                "🔒 Change Password"
             ]
 
             for ep_tab in emp_tabs:
@@ -2119,7 +2124,7 @@ else:
                     st.rerun()
 
             st.write("---")
-            if st.button("Logout", key="emp_logout"):
+            if st.button("🚪 Logout", key="emp_logout"):
                 st.session_state.user = None
                 st.query_params.clear()
                 st.rerun()
@@ -2128,7 +2133,7 @@ else:
         st.title(selected_emp_panel)
 
         # 1. PUNCH PANEL
-        if selected_emp_panel == "Daily Punch (Geofenced)":
+        if selected_emp_panel == "⏱️ Daily Punch":
             st.subheader("Daily Attendance Punch")
 
             assigned_lat = None
@@ -2200,7 +2205,6 @@ else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
-                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2264,7 +2268,7 @@ else:
                 st.info(f"📋 **Today's Activity:** Status: **Shift Ongoing** | **Punch IN:** `{p_in_disp}` | **Last Punch OUT:** `{p_out_disp}`")
 
         # 2. PROFILE DETAILS PANEL
-        elif selected_emp_panel == "My Profile Details":
+        elif selected_emp_panel == "👤 My Profile":
             st.subheader("Personal, Employment & Statutory Profile / वैयक्तिक आणि रोजगाराची माहिती")
 
             cl_name = "Not Assigned / नियुक्त नाही"
@@ -2339,13 +2343,13 @@ else:
                         st.error("Bank Name, Account Number and IFSC Code are required!")
 
         # 3. ATTENDANCE PANEL
-        elif selected_emp_panel == "Attendance Calendar":
+        elif selected_emp_panel == "📅 Attendance":
             st.subheader("My Attendance Muster & Calendar / माझी उपस्थिती नोंदवही")
             t_day, t_month, t_year, t_ph = st.tabs([
-                "📅 Daily View / दैनिक उपस्थिती",
-                "🗓️ Monthly Summary / मासिक गोषवारा",
-                "📈 Annual Muster / वार्षिक मस्टर",
-                "🎉 Paid Holidays / सवेतन सुट्ट्या"
+                "📅 Daily View",
+                "🗓️ Monthly Summary",
+                "📈 Annual Muster",
+                "🎉 Paid Holidays"
             ])
 
             st.markdown("""
@@ -2580,13 +2584,12 @@ else:
                     st.dataframe(pd.DataFrame(st_holidays), use_container_width=True)
 
         # 4. MONTHLY PAYSLIPS PANEL
-        elif selected_emp_panel == "Monthly Payslips (15th)":
+        elif selected_emp_panel == "📄 Payslips":
             st.subheader("Month-Wise Salary Payslips / मासिक पगार स्लिप")
             st.caption("Official payslips are generated on the 15th of every month following payroll closure.")
             
             sel_m = st.selectbox("Select Payroll Month", ["September 2026", "August 2026", "July 2026"])
             
-            # १. वेज शीट ॲडमिनने लॉक केली आहे का ते तपासणे
             is_sheet_locked = False
             try:
                 chk_lock = supabase.table("locked_payrolls").select("*").eq("entity_id", emp.get("entity_id")).eq("payroll_month", sel_m).eq("is_locked", True).execute().data
@@ -2601,7 +2604,6 @@ else:
                 ent_obj = next((e for e in fetch_cached_entities() if e["id"] == emp.get("entity_id")), None)
                 cli_name = next((c["name"] for c in fetch_cached_clients() if c["id"] == emp.get("client_id")), "Plant Site")
                 
-                # अचूक सॅलरी रूल शोधणे
                 sal_rule = None
                 try:
                     sr_query = supabase.table("salary_structures").select("*").eq("entity_id", emp.get("entity_id"))
@@ -2627,7 +2629,6 @@ else:
                 o_pay = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
                 ot_rate = float(sal_rule.get("ot_rate_per_hour", 120.0)) if sal_rule else 120.0
 
-                # प्रत्यक्ष हजेरी आणि ओटी तास
                 p_days = 26.0
                 ot_hrs = 0.0
                 try:
@@ -2645,12 +2646,10 @@ else:
                 e_ot = round(ot_hrs * ot_rate, 2)
                 t_gross = e_basic + e_da + e_hra + e_other + e_ot
 
-                # पीएफ सीलिंग (₹15,000 पेक्षा जास्त असल्यास कमाल ₹1,800)
                 pf_d = 1800.0 if (e_basic + e_da) > 15000 else round((e_basic + e_da) * 0.12, 2)
                 esic_d = round(t_gross * 0.0075, 2)
                 pt_d = 200.0 if t_gross > 10000 else 0.0
 
-                # प्रत्यक्ष ॲडव्हान्स आणि PPE कपात
                 adv_d = 0.0
                 try:
                     adv_res = supabase.table("advance_salaries").select("amount").eq("employee_id", emp["id"]).eq("status", "APPROVED").execute().data or []
@@ -2672,7 +2671,6 @@ else:
                 }
                 att_summary_payload = {'paid_days': p_days, 'total_days': 26, 'ot_hours': ot_hrs}
 
-                # अंतिम सॅलरी स्लिप तयार करणे
                 payslip_pdf_bytes = generate_salary_payslip(emp, ent_obj, cli_name, sel_m, sal_rule, att_summary_payload, deductions_payload)
 
                 st.download_button(
@@ -2683,7 +2681,7 @@ else:
                 )
 
         # 5. DOCUMENTS VAULT PANEL
-        elif selected_emp_panel == "Official Documents Vault":
+        elif selected_emp_panel == "📁 Documents":
             st.subheader("Official Employment Documents / अधिकृत नोकरी कागदपत्रे")
             ent_obj = supabase.table("entities").select("*").eq("id", emp.get("entity_id")).execute().data
             ent_val = ent_obj[0] if ent_obj else None
@@ -2726,7 +2724,7 @@ else:
                 st.download_button("📥 Download ESIC Card (PDF)", data=b"ESIC Card Document", file_name=f"ESIC_{emp.get('employee_code')}.pdf", mime="application/pdf")
 
         # 6. PPE REQUEST PANEL
-        elif selected_emp_panel == "Request PPE Equipment":
+        elif selected_emp_panel == "🦺 Request PPE":
             st.subheader("Request Safety Equipment / PPE / सुरक्षा साधनांची मागणी")
             
             emp_catalog = []
@@ -2766,7 +2764,7 @@ else:
                             st.error(f"Error submitting PPE request: {e}")
 
         # 7. ADVANCE SALARY PANEL
-        elif selected_emp_panel == "Request Salary Advance":
+        elif selected_emp_panel == "💰 Request Advance":
             st.subheader("Apply for Salary Advance or Loan / ॲडव्हान्स पगार अर्ज")
             with st.form("emp_adv_standalone_form"):
                 adv_amt = st.number_input("Requested Advance Amount (₹)", min_value=500, step=500, value=2000)
@@ -2785,7 +2783,7 @@ else:
                         st.error(f"Error submitting request: {e}")
 
         # 8. CHANGE PASSWORD PANEL
-        elif selected_emp_panel == "Change Password":
+        elif selected_emp_panel == "🔒 Change Password":
             st.subheader("Change Portal Password / पासवर्ड बदला")
             with st.form("change_emp_pwd_form"):
                 new_p1 = st.text_input("New Password", type="password")
