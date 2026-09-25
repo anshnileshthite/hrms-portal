@@ -32,7 +32,7 @@ def fetch_cached_clients():
     except Exception:
         return []
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=15)
 def fetch_cached_employees():
     try:
         return supabase.table("employees").select("*").execute().data or []
@@ -652,7 +652,13 @@ if not st.session_state.user:
             c_name = col_left.text_input("Candidate Full Name *")
             c_father = col_left.text_input("Father's Name *")
             c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
-            c_dob = col_left.date_input("Date of Birth (DOB) *", min_value=date(1960, 1, 1), max_value=date(2010, 1, 1), value=date(1998, 1, 1))
+            c_dob = col_left.date_input(
+                "Date of Birth (DOB) *", 
+                min_value=date(1950, 1, 1), 
+                max_value=date(2020, 12, 1), 
+                value=date(1998, 1, 1),
+                format="DD/MM/YYYY"
+            )
             c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
             c_phone = col_left.text_input("Employee Mobile Number *")
             c_emergency = col_left.text_input("Emergency Contact Number *")
@@ -696,11 +702,12 @@ if not st.session_state.user:
                         "pan_number": c_pan,
                         "aadhar_number": c_aadhar,
                         "role": "employee", 
-                        "status": "APPROVED"
+                        "status": "PENDING_SUPERVISOR"  # थेट सुपरवायझरकडे पाठवण्यासाठी
                     }
                     try:
                         supabase.table("employees").insert(new_candidate).execute()
-                        st.success("Application submitted successfully!")
+                        st.cache_data.clear()
+                        st.success("Application submitted successfully! Forwarded to Supervisor.")
                     except Exception as err:
                         st.error(f"Error submitting data: {err}")
 
@@ -782,7 +789,7 @@ else:
                     me_name = m2.text_input("Full Name *")
                     me_father = m3.text_input("Father's Name")
                     me_gender = m1.selectbox("Gender", ["Male", "Female", "Other"])
-                    me_dob = m2.date_input("Date of Birth (DOB)", value=date(1995, 1, 1))
+                    me_dob = m2.date_input("Date of Birth (DOB)", value=date(1995, 1, 1), format="DD/MM/YYYY")
                     me_phone = m3.text_input("Mobile Number *")
                     
                     me_emg = m1.text_input("Emergency Contact")
@@ -857,7 +864,7 @@ else:
                         ed4, ed5, ed6 = st.columns(3)
                         raw_dob = curr_selected.get("dob")
                         default_dob = datetime.strptime(str(raw_dob).split("T")[0], "%Y-%m-%d").date() if raw_dob else date(1995, 1, 1)
-                        up_dob = ed4.date_input("Date of Birth (DOB)", value=default_dob)
+                        up_dob = ed4.date_input("Date of Birth (DOB)", value=default_dob, format="DD/MM/YYYY")
                         up_phone = ed5.text_input("Mobile Number *", value=curr_selected.get("phone_number", ""))
                         up_emg = ed6.text_input("Emergency Contact", value=curr_selected.get("emergency_contact", ""))
 
@@ -944,7 +951,7 @@ else:
                         f_bnk = st.file_uploader("Upload Bank Passbook / Cheque", type=["pdf", "jpg", "png"], key=f"vault_bnk_{curr_emp['id']}")
                         if f_bnk: st.success("Bank Details updated!")
 
-        # 3. Candidate Approvals
+        # 3. Candidate Approvals (Supervisor Verified -> Admin Final Approval)
         elif selected_panel == "Candidate Approvals":
             st.subheader("New Candidate Approvals & Login Dispatch (Admin Desk)")
             cands = supabase.table("employees").select("*").eq("status", "PENDING_ADMIN").execute().data or []
@@ -971,7 +978,7 @@ else:
                         sel_wo = app1.selectbox("Confirm Weekly Off Day *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key=f"wo_{cand['id']}")
 
                         col_act1, col_act2 = st.columns(2)
-                        if col_act1.button("Approve and Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
+                        if col_act1.button("Approve & Send Login Credentials", key=f"ap_{cand['id']}", type="primary"):
                             supabase.table("employees").update({
                                 "employee_code": set_user_id, 
                                 "user_id": set_user_id, 
@@ -992,7 +999,7 @@ else:
                             st.success(f"Candidate approved! User ID: {set_user_id}")
                             st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">Send Login via WhatsApp</a>', unsafe_allow_html=True)
 
-                        if col_act2.button("Reject and Delete Application", key=f"rej_{cand['id']}"):
+                        if col_act2.button("Reject & Delete Application", key=f"rej_{cand['id']}"):
                             supabase.table("employees").delete().eq("id", cand["id"]).execute()
                             st.cache_data.clear()
                             st.warning("Application rejected successfully!")
@@ -2227,7 +2234,6 @@ else:
                     actual_user_lat = float(raw_dev_lat)
                     actual_user_lon = float(raw_dev_lon)
 
-                    # Geofence Distance Calculation
                     R = 6371000.0
                     phi1 = math.radians(actual_user_lat)
                     phi2 = math.radians(assigned_lat)
@@ -2237,7 +2243,6 @@ else:
                     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
                     dist = R * c
 
-                    # Strict 15 Meters Geofence Validation
                     is_valid_location = dist <= 15.0
 
                     if is_valid_location:
