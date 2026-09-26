@@ -898,7 +898,7 @@ else:
                         up_uan = st1.text_input("UAN Number", value=curr_selected.get("uan_number", ""))
                         up_esic = st2.text_input("ESIC Number", value=curr_selected.get("esic_number", ""))
                         up_pan = st3.text_input("PAN Number", value=curr_selected.get("pan_number", ""))
-                        up_aadhar = st4.text_input("Aadhaar Number", value=str(emp.get("aadhar_number") or ""))
+                        up_aadhar = st4.text_input("Aadhaar Number", value=curr_selected.get("aadhar_number") or ""))
 
                         bk1, bk2, bk3, bk4 = st.columns(4)
                         up_bank = bk1.text_input("Bank Name", value=curr_selected.get("bank_name", ""))
