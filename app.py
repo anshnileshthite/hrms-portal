@@ -750,7 +750,7 @@ else:
             else:
                 st.info("No entities configured yet.")
 
-        # 2. Employee Master & Docs (Full Assignment Control + Duplicate Code Protection)
+        # 2. Employee Master & Docs (Bug Fixed: curr_selected.get instead of emp.get)
         elif selected_panel == "Employee Master & Docs":
             st.subheader("Employee Master Management & Document Vault")
             ent_list = fetch_cached_entities()
@@ -898,7 +898,8 @@ else:
                         up_uan = st1.text_input("UAN Number", value=curr_selected.get("uan_number", ""))
                         up_esic = st2.text_input("ESIC Number", value=curr_selected.get("esic_number", ""))
                         up_pan = st3.text_input("PAN Number", value=curr_selected.get("pan_number", ""))
-                        up_aadhar = st4.text_input("Aadhaar Number", value=curr_selected.get("aadhar_number") or ""))
+                        # दुरुस्ती: curr_selected.get वापरले आहे, emp.get नाही
+                        up_aadhar = st4.text_input("Aadhaar Number", value=str(curr_selected.get("aadhar_number") or ""))
 
                         bk1, bk2, bk3, bk4 = st.columns(4)
                         up_bank = bk1.text_input("Bank Name", value=curr_selected.get("bank_name", ""))
@@ -1106,7 +1107,7 @@ else:
                     a_ctc = round(m_ctc * 12, 2)
 
                     st.markdown(f"""
-                    <div style="background-color: #F1F5F9; border-left: 4px solid #0284C7; padding: 10px; border-radius: 4px; margin-login: 10px 0px;">
+                    <div style="background-color: #F1F5F9; border-left: 4px solid #0284C7; padding: 10px; border-radius: 4px; margin: 10px 0px;">
                         <b>Gross Wages:</b> Rs.{gross:,.2f}/month | 
                         <b>Employer PF:</b> Rs.{er_pf_val:,.2f} | 
                         <b>Employer ESIC:</b> Rs.{er_esic_val:,.2f}<br>
@@ -2010,12 +2011,15 @@ else:
                                 st.error(f"Error updating user: {e}")
 
                         if b_col2.form_submit_button("Delete User Access"):
-                            supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
-                            st.cache_data.clear()
-                            st.toast("🗑️ User access revoked!")
-                            st.warning("User access revoked successfully!")
-                            pytime.sleep(1)
-                            st.rerun()
+                            try:
+                                supabase.table("employees").delete().eq("id", curr_u["id"]).execute()
+                                st.cache_data.clear()
+                                st.toast("🗑️ User access revoked!")
+                                st.warning("User access revoked successfully!")
+                                pytime.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error deleting user: {e}")
                 else:
                     st.info("No user access accounts configured yet.")
 
