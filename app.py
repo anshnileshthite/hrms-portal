@@ -639,7 +639,7 @@ if not st.session_state.user:
             c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
             c_phone = col_left.text_input("Employee Mobile Number *")
             c_emergency = col_left.text_input("Emergency Contact Number *")
-
+            c_address = col_left.text_input("Permanent Address *")
             c_uan = col_right.text_input("UAN Number")
             c_esic = col_right.text_input("ESIC Number")
             c_bank = col_right.text_input("Bank Name")
@@ -650,14 +650,14 @@ if not st.session_state.user:
             c_aadhar = col_right.text_input("Aadhaar Number *")
 
             st.write("---")
-            st.write("#### Document Attachments (Mandatory - max 200MB)")
+            st.write("#### Document Attachments (Mandatory - max 2MB)")
             up_photo = col_left.file_uploader("Passport Size Photo", type=["jpg", "png"])
             up_aadhar = col_right.file_uploader("Aadhaar Card Copy", type=["pdf", "jpg", "png"])
             up_pan = col_left.file_uploader("PAN Card Copy", type=["pdf", "jpg", "png"])
             up_bank = col_right.file_uploader("Bank Passbook / Cheque", type=["pdf", "jpg", "png"])
 
             if st.form_submit_button("Submit Onboarding Application"):
-                if not c_name or not c_phone:
+                if not c_name or not c_phone or not c_address:
                     st.error("Mandatory fields (*) are required!")
                 else:
                     new_candidate = {
@@ -670,6 +670,7 @@ if not st.session_state.user:
                         "marital_status": c_marital,
                         "phone_number": c_phone, 
                         "emergency_contact": c_emergency, 
+                        "permanent_address": c_address,
                         "uan_number": c_uan,
                         "esic_number": c_esic, 
                         "bank_name": c_bank, 
