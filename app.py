@@ -708,7 +708,7 @@ if not st.session_state.user:
             c_address = col_left.text_area("Permanent Address *")
             
             c_uan = col_right.text_input("UAN Number (12 Digits)")
-            c_esic = col_right.text_input("ESIC Number (17 Digits)")
+            c_esic = col_right.text_input("ESIC Number (10 Digits)")
             c_bank = col_right.text_input("Bank Name *")
             c_branch = col_right.text_input("Bank Branch Name *")
             c_acc = col_right.text_input("Bank Account Number *")
@@ -755,8 +755,8 @@ if not st.session_state.user:
                         st.error("Invalid IFSC format! Must be 11 characters (e.g. SRCB0000376).")
                     elif clean_uan and not re.match(r"^\d{12}$", clean_uan):
                         st.error("Invalid UAN Number! Must be exactly 12 numeric digits.")
-                    elif clean_esic and not re.match(r"^\d{17}$", clean_esic):
-                        st.error("Invalid ESIC Number! Must be exactly 17 numeric digits.")
+                    elif clean_esic and not re.match(r"^\d{10}$", clean_esic):
+                        st.error("Invalid ESIC Number! Must be exactly 10 numeric digits.")
                     else:
                         new_candidate = {
                             "user_id": f"TEMP_{clean_phone}", 
