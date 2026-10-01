@@ -1,0 +1,45 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # दर २ दिवसांनी एकदा दुपारी १२ वाजता ही स्क्रिप्ट आपोआप रन होईल
+    - cron: '0 12 */2 * *'
+  workflow_dispatch: # हवं तेव्हा मॅन्युअली रन करण्यासाठीचे बटण
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install requests
+
+      - name: Ping Supabase Database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python - <<EOF
+          import os
+          import requests
+
+          url = f"{os.environ['SUPABASE_URL']}/rest/v1/entities?select=id&limit=1"
+          headers = {
+              "apikey": os.environ['SUPABASE_KEY'],
+              "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
+          }
+
+          response = requests.get(url, headers=headers)
+          if response.status_code == 200:
+              print("Supabase ping successful! Status: 200")
+          else:
+              print(f"Failed with status: {response.status_code}, {response.text}")
+          EOF
