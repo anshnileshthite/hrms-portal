@@ -2590,34 +2590,57 @@ else:
                         cli_select_map = {c["name"]: c for c in clis_all}
                         sel_c_e = st.selectbox("Select Client to Edit/Delete", list(cli_select_map.keys()))
                         curr_c = cli_select_map[sel_c_e]
-                        with st.form("edit_client_all_fields_form_full_admin"):
-                            cl_up_name = st.text_input("Client Name", value=curr_c.get("name", ""))
-                            cl_up_gst = st.text_input("Client GST", value=curr_c.get("gst_number", ""))
-                            cl_up_serv = st.number_input("Service Charge Rate (%)", value=float(curr_c.get("service_charge_pct") or 7.0), step=0.5)
-                            cl_up_addr = st.text_area("Address", value=curr_c.get("plant_location", ""))
-                            cl_up_cn = st.text_input("Contact Person", value=curr_c.get("contact_person_name", ""))
-                            cl_up_cm = st.text_input("Contact Mobile", value=curr_c.get("contact_person_mobile", ""))
-                            cl_up_em = st.text_input("Contact Email", value=curr_c.get("contact_person_email", ""))
-                            cg1, cg2 = st.columns(2)
-                            cl_up_lat = cg1.number_input("Latitude", format="%.6f", value=float(curr_c.get("latitude", 18.6512)))
-                            cl_up_lon = cg2.number_input("Longitude", format="%.6f", value=float(curr_c.get("longitude", 73.8055)))
+                
+                # Fetch existing entities linked with this client
+                existing_client_ents = supabase.table("client_entities").select("entity_id").eq("client_id", curr_c["id"]).execute().data or []
+                curr_assigned_ent_ids = [item["entity_id"] for item in existing_client_ents]
+                curr_assigned_ent_names = [k for k, v in e_dict.items() if v in curr_assigned_ent_ids]
 
-                            cb1, cb2 = st.columns(2)
-                            if cb1.form_submit_button("Update Client", type="primary"):
-                                supabase.table("clients").update({
-                                    "name": cl_up_name, "gst_number": cl_up_gst, "service_charge_pct": cl_up_serv,
-                                    "plant_location": cl_up_addr, "contact_person_name": cl_up_cn,
-                                    "contact_person_mobile": cl_up_cm, "contact_person_email": cl_up_em,
-                                    "latitude": cl_up_lat, "longitude": cl_up_lon
-                                }).eq("id", curr_c["id"]).execute()
-                                st.cache_data.clear()
-                                st.success("Client details updated!")
-                                st.rerun()
-                            if cb2.form_submit_button("Delete Client"):
-                                supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
-                                st.cache_data.clear()
-                                st.warning("Client deleted!")
-                                st.rerun()
+                with st.form("edit_client_all_fields_form_full_admin"):
+                    cl_up_name = st.text_input("Client Name", value=curr_c.get("name", ""))
+                    cl_up_gst = st.text_input("Client GST", value=curr_c.get("gst_number", ""))
+                    cl_up_serv = st.number_input("Service Charge Rate (%)", value=float(curr_c.get("service_charge_pct") or 7.0), step=0.5)
+                    cl_up_addr = st.text_area("Address", value=curr_c.get("plant_location", ""))
+                    cl_up_cn = st.text_input("Contact Person", value=curr_c.get("contact_person_name", ""))
+                    cl_up_cm = st.text_input("Contact Mobile", value=curr_c.get("contact_person_mobile", ""))
+                    cl_up_em = st.text_input("Contact Email", value=curr_c.get("contact_person_email", ""))
+                    
+                    # 👈 Multiple Entity selection multiselect
+                    cl_up_ents = st.multiselect("Update Assigned Entity Providers *", options=list(e_dict.keys()), default=curr_assigned_ent_names)
+                    
+                    cg1, cg2 = st.columns(2)
+                    cl_up_lat = cg1.number_input("Latitude", format="%.6f", value=float(curr_c.get("latitude", 18.6512)))
+                    cl_up_lon = cg2.number_input("Longitude", format="%.6f", value=float(curr_c.get("longitude", 73.8055)))
+
+                    cb1, cb2 = st.columns(2)
+                    if cb1.form_submit_button("Update Client", type="primary"):
+                        # 1. Update client details
+                        supabase.table("clients").update({
+                            "name": cl_up_name, "gst_number": cl_up_gst, "service_charge_pct": cl_up_serv,
+                            "plant_location": cl_up_addr, "contact_person_name": cl_up_cn,
+                            "contact_person_mobile": cl_up_cm, "contact_person_email": cl_up_em,
+                            "latitude": cl_up_lat, "longitude": cl_up_lon
+                        }).eq("id", curr_c["id"]).execute()
+
+                        # 2. Sync multiple entity mappings in client_entities table
+                        supabase.table("client_entities").delete().eq("client_id", curr_c["id"]).execute()
+                        for ent_name in cl_up_ents:
+                            ent_id = e_dict.get(ent_name)
+                            if ent_id:
+                                supabase.table("client_entities").insert({
+                                    "client_id": curr_c["id"],
+                                    "entity_id": ent_id
+                                }).execute()
+
+                        st.cache_data.clear()
+                        st.success("Client details and multiple entities updated successfully!")
+                        st.rerun()
+
+                    if cb2.form_submit_button("Delete Client"):
+                        supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
+                        st.cache_data.clear()
+                        st.warning("Client deleted!")
+                        st.rerun()
 
         # PANEL 15: USER ROLES & ACCESS
         elif selected_panel == "User Roles & Access":
