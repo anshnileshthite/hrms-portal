@@ -2642,7 +2642,7 @@ else:
 
                     rc7, rc8 = st.columns(2)
                     assigned_ents = rc7.multiselect("Assign Entity Providers", options=list(ent_m.keys()))
-                    assigned_client = rc8.selectbox("Assign Client Site", options=["No Client"] + list(cli_m.keys()))
+                    assigned_clients = rc8.multiselect("Assign Client Sites (Multiple)", options=list(cli_m.keys()))
 
                     if st.form_submit_button("Save User Credentials", type="primary"):
                          if not new_u or not new_n or not new_p or not new_ph:
@@ -2658,6 +2658,16 @@ else:
                                   "email": new_em, "role": new_r, 
                                   "status": "APPROVED"
                                }).execute()
+                               # 2. जर भूमिका 'supervisor' असेल तर निवडलेले सर्व clients 'supervisor_clients' मध्ये लिंक करा
+                               if ins_res.data and new_r == "supervisor":
+                                   sup_id = ins_res.data[0]["id"]
+                                   for cli_name in assigned_clients:
+                                        cli_id = cli_m.get(cli_name)
+                                        if cli_id:
+                                            supabase.table("supervisor_clients").insert({
+                                                "supervisor_id": sup_id,
+                                                "client_id": cli_id
+                                            }).execute()
             
             # 2. जर supervisor असेल आणि multiple entities निवडल्या असतील तर supervisor_entities मध्ये save करा
                                if ins_res.data and new_r == "supervisor":
@@ -2671,7 +2681,7 @@ else:
                                          }).execute()
 
                                st.cache_data.clear()
-                               st.success(f"User {new_u} created successfully with multiple entities!")
+                               st.success(f"User {new_u} created successfully with multiple Entities & Clients!")
                                st.rerun()
 
             with t_u_edit:
