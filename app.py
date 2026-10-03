@@ -154,19 +154,24 @@ def get_entity_logo(entity_name):
 def get_entity_assets(code_prefix):
     pref = str(code_prefix or "sagar").lower().strip()
     
-    # 1. Entity-wise vegevegala stamp shodhne (उदा. gm_stamp, se_stamp, un_stamp)
-    stamp_filename_1 = f"{pref}_stamp.png"
-    stamp_filename_2 = f"{pref}_Stamp.png"
+    # 1. सिस्टीम आपोआप स्मॉल लेटरमधील स्टॅम्प फाईल शोधेल (उदा. gm_stamp.png, abc_stamp.png)
+    specific_stamp = f"{pref}_stamp.png"
     
     final_stamp = None
-    if os.path.exists(stamp_filename_1):
-        final_stamp = stamp_filename_1
-    elif os.path.exists(stamp_filename_2):
-        final_stamp = stamp_filename_2
-    elif os.path.exists("stamp.png"):
+    if os.path.exists(specific_stamp):
+        final_stamp = specific_stamp
+    else:
+        # 2. भविष्यात नवीन एंटिटी ॲड केल्यावर फोल्डरमध्ये त्यांच्या नावाचा स्टॅम्प शोधण्यासाठी ऑटोमॅटिक लूप
+        for file in os.listdir("."):
+            if file.lower().startswith(pref) and "stamp" in file.lower() and file.endswith((".png", ".jpg", ".jpeg")):
+                final_stamp = file
+                break
+                
+    # 3. कोणतीही विशिष्ट फाईल न मिळाल्यास डिफॉल्ट स्टॅम्प वापरणे
+    if not final_stamp and os.path.exists("stamp.png"):
         final_stamp = "stamp.png"
 
-    # 2. Signature sathi tumhi ekch thevli ahe mhanun 'signature.png' waparne
+    # 4. सर्व एंटिटीजसाठी कॉमन सही (Signature)
     final_sig = "signature.png" if os.path.exists("signature.png") else None
 
     return final_stamp, final_sig
