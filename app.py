@@ -248,6 +248,9 @@ def update_leave_accrual(emp_id):
     except Exception: pass
 
 def generate_official_offer_letter(emp_data, entity_obj, client_name="Authorized Client Site", sal_rule=None):
+    # जर सॅलरी रूल सापडला नाही, तर कोड क्रॅश न होता युजरला मेसेज देईल
+    if not sal_rule:
+        return None # किंवा इथे खालीलप्रमाणे एरर हँडल करू शकता
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=60)
     styles = getSampleStyleSheet()
@@ -3602,54 +3605,51 @@ else:
                 is_offline_mode = st.checkbox("Simulate No Network (Offline Punch Mode)", value=False)
 
                 if st.form_submit_button("Thumb / Geo Punch Now", type="primary"):
-                     current_time_str = datetime.now().strftime("%H:%M:%S")
-            geofence_passed = True
-            dist_meters = 0.0
+                    current_time_str = datetime.now().strftime("%H:%M:%S")
+                    geofence_passed = True
+                    dist_meters = 0.0
 
-            if client_record and not is_offline_mode:
-                c_lat = float(client_record[0].get("latitude", 18.651200))
-                c_lon = float(client_record[0].get("longitude", 73.805500))
-                
-                lat1, lon1, lat2, lon2 = map(math.radians, [user_lat, user_lon, c_lat, c_lon])
-                dlon = lon2 - lon1
-                dlat = lat2 - lat1
-                a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-                c = 2 * math.asin(math.sqrt(a))
-                dist_meters = c * 6371000 # Meters
+                    if client_record and not is_offline_mode:
+                        c_lat = float(client_record[0].get("latitude", 18.651200))
+                        c_lon = float(client_record[0].get("longitude", 73.805500))
+                        
+                        lat1, lon1, lat2, lon2 = map(math.radians, [user_lat, user_lon, c_lat, c_lon])
+                        dlon = lon2 - lon1
+                        dlat = lat2 - lat1
+                        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+                        c = 2 * math.asin(math.sqrt(a))
+                        dist_meters = c * 6371000
 
-                if dist_meters > 50.0:
-                    geofence_passed = False
+                        if dist_meters > 50.0:
+                            geofence_passed = False
 
-            if not geofence_passed:
-                st.error(f"❌ Invalid Location: You are outside the plant geofence radius (Distance: {dist_meters:.1f}m).")
-            elif is_offline_mode:
-                st.warning("⚠️ Offline Mode: Punch saved locally.")
-            else:
-                # 1. आधी तपासा की आजची एंट्री आधीपासून आहे का
-                check_att = supabase.table("attendance").select("id, punch_in").eq("employee_id", emp_id).eq("date", today_date_str).execute().data
+                    if not geofence_passed:
+                        st.error(f"❌ Invalid Location: You are outside the plant geofence radius (Distance: {dist_meters:.1f}m).")
+                    elif is_offline_mode:
+                        st.warning("⚠️ Offline Mode: Punch saved locally.")
+                    else:
+                        check_att = supabase.table("attendance").select("id, punch_in").eq("employee_id", emp_id).eq("date", today_date_str).execute().data
 
-                if not check_att:
-                    # 2. आजची पहिलीच एंट्री असेल तर INSERT करा (First Punch-In)
-                    supabase.table("attendance").insert({
-                        "employee_id": emp_id,
-                        "date": today_date_str,
-                        "status": "P",
-                        "punch_in": current_time_str,
-                        "punch_out": None,
-                        "ot_hours": 0.0,
-                        "is_valid_geo": True
-                    }).execute()
-                    st.toast("✅ First Punch-In Recorded Successfully!")
-                else:
-                    # 3. आधीच पंच-इन असेल तर फक्त PUNCH-OUT अपडेट करा (Last Punch-Out)
-                    att_id = check_att[0]["id"]
-                    supabase.table("attendance").update({
-                        "punch_out": current_time_str
-                    }).eq("id", att_id).execute()
-                    st.toast("✅ Attendance Updated with Punch-Out Time!")
-                    
-                pytime.sleep(1)
-                st.rerun()
+                        if not check_att:
+                            supabase.table("attendance").insert({
+                                "employee_id": emp_id,
+                                "date": today_date_str,
+                                "status": "P",
+                                "punch_in": current_time_str,
+                                "punch_out": None,
+                                "ot_hours": 0.0,
+                                "is_valid_geo": True
+                            }).execute()
+                            st.toast("✅ First Punch-In Recorded Successfully!")
+                        else:
+                            att_id = check_att[0]["id"]
+                            supabase.table("attendance").update({
+                                "punch_out": current_time_str
+                            }).eq("id", att_id).execute()
+                            st.toast("✅ Attendance Updated with Punch-Out Time!")
+                            
+                        pytime.sleep(1)
+                        st.rerun()
 
         # EMPLOYEE PANEL 2: APPLY LEAVE & BALANCE
         elif selected_emp_panel == "Apply Leave & Balance":
