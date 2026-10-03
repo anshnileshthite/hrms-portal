@@ -2558,19 +2558,13 @@ else:
                         en_pan = st.text_input("PAN Number *")
                         en_ph = st.text_input("Phone Number *")
                         en_em = st.text_input("Email ID *")
-                        st.markdown("##### Bank Details for Invoices")
-                        en_bnk = st.text_input("Bank Name", value="SARASWAT BANK")
-                        en_branch = st.text_input("Branch Name")
-                        en_acc = st.text_input("Account Number", value="610000000045918")
-                        en_ifsc = st.text_input("IFSC Code", value="SRCB0000376")
                         
                         if st.form_submit_button("Save Entity", type="primary"):
                             if en_name and en_pref and en_gst:
                                 supabase.table("entities").insert({
                                     "name": en_name, "code_prefix": en_pref, "owner_name": en_owner,
                                     "address": en_addr, "gst_number": en_gst, "pan_number": en_pan,
-                                    "phone": en_ph, "email": en_em, "bank_name": en_bnk,
-                                    "bank_branch": en_branch, "bank_account_no": en_acc, "ifsc_code": en_ifsc
+                                    "phone": en_ph, "email": en_em
                                 }).execute()
                                 st.cache_data.clear()
                                 st.success("Entity registered successfully!")
@@ -2584,52 +2578,25 @@ else:
                         curr_e = ent_select_map[sel_ent_e]
                         with st.form("edit_entity_portal_form_full_admin"):
                             en_up_name = st.text_input("Firm Name *", value=curr_e.get("name", ""))
-                            en_up_pref = st.text_input("Code Prefix (e.g. SE, GM) *", value=curr_e.get("code_prefix", ""))
-                            en_up_owner = st.text_input("Owner Name", value=curr_e.get("owner_name", ""))
+                            en_up_pref = st.text_input("Code Prefix *", value=curr_e.get("code_prefix", ""))
                             en_up_addr = st.text_area("Full Address *", value=curr_e.get("address", ""))
                             en_up_gst = st.text_input("GST Number *", value=curr_e.get("gst_number", ""))
-                            en_up_pan = st.text_input("PAN Number", value=curr_e.get("pan_number", ""))
                             en_up_ph = st.text_input("Phone Number", value=curr_e.get("phone", ""))
-                            en_up_em = st.text_input("Email ID", value=curr_e.get("email", ""))
-                            en_up_bnk = st.text_input("Bank Name", value=curr_e.get("bank_name", ""))
-                            en_up_acc = st.text_input("Bank Account No", value=curr_e.get("bank_account_no", ""))
-                            en_up_ifsc = st.text_input("Bank IFSC Code", value=curr_e.get("ifsc_code", ""))
                             
                             c1, c2 = st.columns(2)
                             if c1.form_submit_button("Update Entity", type="primary"):
-                                try:
-                                    supabase.table("entities").update({
-                                        "name": en_up_name, 
-                                        "code_prefix": en_up_pref, 
-                                        "owner_name": en_up_owner, 
-                                        "address": en_up_addr,
-                                        "gst_number": en_up_gst, 
-                                        "pan_number": en_up_pan, 
-                                        "phone": en_up_ph, 
-                                        "email": en_up_em,
-                                        "bank_name": en_up_bnk, 
-                                        "bank_account_no": en_up_acc, 
-                                        "ifsc_code": en_up_ifsc
-                                    }).eq("id", curr_e["id"]).execute()
-                                    
-                                    st.cache_data.clear()
-                                    st.toast("✅ Entity updated successfully!")
-                                    st.success("Entity updated!")
-                                    pytime.sleep(1)
-                                    st.rerun()
-                                except Exception as err:
-                                    st.error(f"Error updating entity: {err}")
-
+                                supabase.table("entities").update({
+                                    "name": en_up_name, "code_prefix": en_up_pref, 
+                                    "address": en_up_addr, "gst_number": en_up_gst, "phone": en_up_ph
+                                }).eq("id", curr_e["id"]).execute()
+                                st.success("Entity updated!")
+                                pytime.sleep(1)
+                                st.rerun()
                             if c2.form_submit_button("Delete Entity"):
-                                try:
-                                    supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
-                                    st.cache_data.clear()
-                                    st.toast("🗑️ Entity deleted successfully!")
-                                    st.warning("Entity deleted!")
-                                    pytime.sleep(1)
-                                    st.rerun()
-                                except Exception as err:
-                                    st.error(f"Error deleting entity: {err}")
+                                supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
+                                st.warning("Entity deleted!")
+                                pytime.sleep(1)
+                                st.rerun()
 
             with loc2:
                 st.subheader("2. Client Plant Master & Geofence")
@@ -2657,81 +2624,77 @@ else:
                                 ins_cli = supabase.table("clients").insert({
                                     "name": cl_name, "client_code": cl_code, "gst_number": cl_gst,
                                     "service_charge_pct": cl_serv, "plant_location": cl_full_addr,
-                                     "contact_person_name": cl_c_name, "contact_person_email": cl_c_email,
-                                     "contact_person_mobile": cl_c_mobile, "latitude": cl_lat, "longitude": cl_lon
-                                 }).execute()
+                                    "contact_person_name": cl_c_name, "contact_person_email": cl_c_email,
+                                    "contact_person_mobile": cl_c_mobile, "latitude": cl_lat, "longitude": cl_lon
+                                }).execute()
 
-        # 2. निवडलेल्या सर्व entities client_entities मध्ये save करा
                                 if ins_cli.data:
                                     client_id = ins_cli.data[0]["id"]
                                     for ent_name in assigned_ents:
-                                       ent_id = e_dict.get(ent_name)
-                                       if ent_id:
-                                         supabase.table("client_entities").insert({
-                                             "client_id": client_id,
-                                             "entity_id": ent_id
-                                         }).execute()
+                                        ent_id = e_dict.get(ent_name)
+                                        if ent_id:
+                                            supabase.table("client_entities").insert({
+                                                "client_id": client_id,
+                                                "entity_id": ent_id
+                                            }).execute()
 
                                 st.cache_data.clear()
                                 st.success("Client registered successfully with multiple entities!")
                                 st.rerun()
+
                 with t_cli_edit:
                     clis_all = fetch_cached_clients()
                     if clis_all:
                         cli_select_map = {c["name"]: c for c in clis_all}
-                        sel_c_e = st.selectbox("Select Client to Edit/Delete", list(cli_select_map.keys()))
+                        sel_c_e = st.selectbox("Select Client to Edit/Delete", list(cli_select_map.keys()), key="select_client_edit_box")
                         curr_c = cli_select_map[sel_c_e]
                 
-                # Fetch existing entities linked with this client
-                existing_client_ents = supabase.table("client_entities").select("entity_id").eq("client_id", curr_c["id"]).execute().data or []
-                curr_assigned_ent_ids = [item["entity_id"] for item in existing_client_ents]
-                curr_assigned_ent_names = [k for k, v in e_dict.items() if v in curr_assigned_ent_ids]
+                        existing_client_ents = supabase.table("client_entities").select("entity_id").eq("client_id", curr_c["id"]).execute().data or []
+                        curr_assigned_ent_ids = [item["entity_id"] for item in existing_client_ents]
+                        curr_assigned_ent_names = [k for k, v in e_dict.items() if v in curr_assigned_ent_ids]
 
-                with st.form("edit_client_all_fields_form_full_admin"):
-                    cl_up_name = st.text_input("Client Name", value=curr_c.get("name", ""))
-                    cl_up_gst = st.text_input("Client GST", value=curr_c.get("gst_number", ""))
-                    cl_up_serv = st.number_input("Service Charge Rate (%)", value=float(curr_c.get("service_charge_pct") or 7.0), step=0.5)
-                    cl_up_addr = st.text_area("Address", value=curr_c.get("plant_location", ""))
-                    cl_up_cn = st.text_input("Contact Person", value=curr_c.get("contact_person_name", ""))
-                    cl_up_cm = st.text_input("Contact Mobile", value=curr_c.get("contact_person_mobile", ""))
-                    cl_up_em = st.text_input("Contact Email", value=curr_c.get("contact_person_email", ""))
-                    
-                    # 👈 Multiple Entity selection multiselect
-                    cl_up_ents = st.multiselect("Update Assigned Entity Providers *", options=list(e_dict.keys()), default=curr_assigned_ent_names)
-                    
-                    cg1, cg2 = st.columns(2)
-                    cl_up_lat = cg1.number_input("Latitude", format="%.6f", value=float(curr_c.get("latitude", 18.6512)))
-                    cl_up_lon = cg2.number_input("Longitude", format="%.6f", value=float(curr_c.get("longitude", 73.8055)))
+                        with st.form("edit_client_all_fields_form_full_admin"):
+                            cl_up_name = st.text_input("Client Name", value=curr_c.get("name", ""))
+                            cl_up_gst = st.text_input("Client GST", value=curr_c.get("gst_number", ""))
+                            cl_up_serv = st.number_input("Service Charge Rate (%)", value=float(curr_c.get("service_charge_pct") or 7.0), step=0.5)
+                            cl_up_addr = st.text_area("Address", value=curr_c.get("plant_location", ""))
+                            cl_up_cn = st.text_input("Contact Person", value=curr_c.get("contact_person_name", ""))
+                            cl_up_cm = st.text_input("Contact Mobile", value=curr_c.get("contact_person_mobile", ""))
+                            cl_up_em = st.text_input("Contact Email", value=curr_c.get("contact_person_email", ""))
+                            
+                            cl_up_ents = st.multiselect("Update Assigned Entity Providers *", options=list(e_dict.keys()), default=curr_assigned_ent_names, key="edit_client_multiselect_ents")
+                            
+                            cg1, cg2 = st.columns(2)
+                            cl_up_lat = cg1.number_input("Latitude", format="%.6f", value=float(curr_c.get("latitude", 18.6512)))
+                            cl_up_lon = cg2.number_input("Longitude", format="%.6f", value=float(curr_c.get("longitude", 73.8055)))
 
-                    cb1, cb2 = st.columns(2)
-                    if cb1.form_submit_button("Update Client", type="primary"):
-                        # 1. Update client details
-                        supabase.table("clients").update({
-                            "name": cl_up_name, "gst_number": cl_up_gst, "service_charge_pct": cl_up_serv,
-                            "plant_location": cl_up_addr, "contact_person_name": cl_up_cn,
-                            "contact_person_mobile": cl_up_cm, "contact_person_email": cl_up_em,
-                            "latitude": cl_up_lat, "longitude": cl_up_lon
-                        }).eq("id", curr_c["id"]).execute()
+                            cb1, cb2 = st.columns(2)
+                            if cb1.form_submit_button("Update Client", type="primary"):
+                                supabase.table("clients").update({
+                                    "name": cl_up_name, "gst_number": cl_up_gst, "service_charge_pct": cl_up_serv,
+                                    "plant_location": cl_up_addr, "contact_person_name": cl_up_cn,
+                                    "contact_person_mobile": cl_up_cm, "contact_person_email": cl_up_em,
+                                    "latitude": cl_up_lat, "longitude": cl_up_lon
+                                }).eq("id", curr_c["id"]).execute()
 
-                        # 2. Sync multiple entity mappings in client_entities table
-                        supabase.table("client_entities").delete().eq("client_id", curr_c["id"]).execute()
-                        for ent_name in cl_up_ents:
-                            ent_id = e_dict.get(ent_name)
-                            if ent_id:
-                                supabase.table("client_entities").insert({
-                                    "client_id": curr_c["id"],
-                                    "entity_id": ent_id
-                                }).execute()
+                                supabase.table("client_entities").delete().eq("client_id", curr_c["id"]).execute()
+                                for ent_name in cl_up_ents:
+                                    ent_id = e_dict.get(ent_name)
+                                    if ent_id:
+                                        supabase.table("client_entities").insert({
+                                            "client_id": curr_c["id"],
+                                            "entity_id": ent_id
+                                        }).execute()
 
-                        st.cache_data.clear()
-                        st.success("Client details and multiple entities updated successfully!")
-                        st.rerun()
+                                st.cache_data.clear()
+                                st.success("Client updated successfully!")
+                                st.rerun()
 
-                    if cb2.form_submit_button("Delete Client"):
-                        supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
-                        st.cache_data.clear()
-                        st.warning("Client deleted!")
-                        st.rerun()
+                            if cb2.form_submit_button("Delete Client"):
+                                supabase.table("clients").delete().eq("id", curr_c["id"]).execute()
+                                st.cache_data.clear()
+                                st.warning("Client deleted!")
+                                st.rerun()
 
         # PANEL 15: USER ROLES & ACCESS
         elif selected_panel == "User Roles & Access":
