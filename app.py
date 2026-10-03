@@ -2555,24 +2555,34 @@ else:
                         cl_c_name = st.text_input("Contact Person Name *")
                         cl_c_mobile = st.text_input("Contact Person Mobile Number *")
                         cl_c_email = st.text_input("Contact Person Email ID *")
-                        assigned_ent = st.selectbox("Assign Entity Provider *", options=list(e_dict.keys()) if e_dict else ["No Entity"])
+                        assigned_ents = st.multiselect("Assign Entity Providers *", options=list(e_dict.keys()) if e_dict else [])
                         g_col1, g_col2 = st.columns(2)
                         cl_lat = g_col1.number_input("Latitude", format="%.6f", value=18.651200)
                         cl_lon = g_col2.number_input("Longitude", format="%.6f", value=73.805500)
 
                         if st.form_submit_button("Save Client Details", type="primary"):
                             if cl_name and cl_code and cl_gst:
-                                supabase.table("clients").insert({
+                                ins_cli = supabase.table("clients").insert({
                                     "name": cl_name, "client_code": cl_code, "gst_number": cl_gst,
                                     "service_charge_pct": cl_serv, "plant_location": cl_full_addr,
-                                    "contact_person_name": cl_c_name, "contact_person_email": cl_c_email,
-                                    "contact_person_mobile": cl_c_mobile, "latitude": cl_lat, "longitude": cl_lon,
-                                    "entity_id": e_dict.get(assigned_ent)
-                                }).execute()
-                                st.cache_data.clear()
-                                st.success("Client registered successfully!")
-                                st.rerun()
+                                     "contact_person_name": cl_c_name, "contact_person_email": cl_c_email,
+                                     "contact_person_mobile": cl_c_mobile, "latitude": cl_lat, "longitude": cl_lon
+                                 }).execute()
 
+        # 2. निवडलेल्या सर्व entities client_entities मध्ये save करा
+                                if ins_cli.data:
+                                    client_id = ins_cli.data[0]["id"]
+                                    for ent_name in assigned_ents:
+                                       ent_id = e_dict.get(ent_name)
+                                       if ent_id:
+                                         supabase.table("client_entities").insert({
+                                             "client_id": client_id,
+                                             "entity_id": ent_id
+                                         }).execute()
+
+                                st.cache_data.clear()
+                                st.success("Client registered successfully with multiple entities!")
+                                st.rerun()
                 with t_cli_edit:
                     clis_all = fetch_cached_clients()
                     if clis_all:
@@ -2631,27 +2641,38 @@ else:
                     new_em = rc6.text_input("Email ID *")
 
                     rc7, rc8 = st.columns(2)
-                    assigned_ent = rc7.selectbox("Assign Entity Provider", options=["No Entity"] + list(ent_m.keys()))
+                    assigned_ents = rc7.multiselect("Assign Entity Providers", options=list(ent_m.keys()))
                     assigned_client = rc8.selectbox("Assign Client Site", options=["No Client"] + list(cli_m.keys()))
 
                     if st.form_submit_button("Save User Credentials", type="primary"):
-                        if not new_u or not new_n or not new_p or not new_ph:
-                            st.error("User ID, Full Name, Password and Mobile Number are required!")
-                        else:
-                            dup_usr = supabase.table("employees").select("id").eq("user_id", new_u).execute().data
-                            if dup_usr:
-                                st.error(f"Error: User ID '{new_u}' already exists! Choose another ID.")
-                            else:
-                                supabase.table("employees").insert({
-                                    "user_id": new_u, "password": new_p, "full_name": new_n, "phone_number": new_ph,
-                                    "email": new_em, "role": new_r, 
-                                    "entity_id": ent_m.get(assigned_ent) if assigned_ent != "No Entity" else None,
-                                    "client_id": cli_m.get(assigned_client) if assigned_client != "No Client" else None,
-                                    "status": "APPROVED"
-                                }).execute()
-                                st.cache_data.clear()
-                                st.success(f"User {new_u} created successfully!")
-                                st.rerun()
+                         if not new_u or not new_n or not new_p or not new_ph:
+                              st.error("User ID, Full Name, Password and Mobile Number are required!")
+                         else:
+                             dup_usr = supabase.table("employees").select("id").eq("user_id", new_u).execute().data
+                             if dup_usr:
+                               st.error(f"Error: User ID '{new_u}' already exists! Choose another ID.")
+                             else:
+            # 1. Employee / User Insert करा
+                               ins_res = supabase.table("employees").insert({
+                                  "user_id": new_u, "password": new_p, "full_name": new_n, "phone_number": new_ph,
+                                  "email": new_em, "role": new_r, 
+                                  "status": "APPROVED"
+                               }).execute()
+            
+            # 2. जर supervisor असेल आणि multiple entities निवडल्या असतील तर supervisor_entities मध्ये save करा
+                               if ins_res.data and new_r == "supervisor":
+                                  sup_id = ins_res.data[0]["id"]
+                                  for ent_name in assigned_ents:
+                                     ent_id = ent_m.get(ent_name)
+                                     if ent_id:
+                                         supabase.table("supervisor_entities").insert({
+                                             "supervisor_id": sup_id,
+                                             "entity_id": ent_id
+                                         }).execute()
+
+                               st.cache_data.clear()
+                               st.success(f"User {new_u} created successfully with multiple entities!")
+                               st.rerun()
 
             with t_u_edit:
                 users_res = supabase.table("employees").select("*").in_("role", ["supervisor", "client", "admin", "employee"]).execute().data or []
