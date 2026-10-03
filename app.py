@@ -732,7 +732,7 @@ if not st.session_state.user:
             c_name = col_left.text_input("Candidate Full Name *", value=st.session_state.c_name_val)
             c_father = col_left.text_input("Father's Name *", value=st.session_state.c_father_val)
             c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
-            c_dob = col_left.date_input("Date of Birth (DOB) *", min_value=date(1950, 1, 1), max_value=date(2020, 12, 1), value=date(1998, 1, 1), format="DD/MM/YYYY")
+            c_dob = col_left.date_input("Date of Birth (DOB) *", min_value=date(1940, 1, 1), max_value=date(2026, 12, 1), value=date(1998, 1, 1), format="DD/MM/YYYY")
             c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
             c_phone = col_left.text_input("Employee Mobile Number * (10 Digits)", value=st.session_state.c_phone_val)
             c_emergency = col_left.text_input("Emergency Contact Number *", value=st.session_state.c_emg_val)
@@ -1703,9 +1703,12 @@ else:
                     st.write(f"##### Deployed Workers Roster Setup ({len(site_emps)} Active Staff)")
 
                     st.markdown("""
-                    <div style="background:#F1F5F9; border-left:4px solid #1E3A8A; padding:10px 14px; border-radius:6px; margin-bottom:12px;">
-                        <b>Quick Master Bulk Action:</b> Select a master shift and apply to all workers at once, then adjust individual rows if needed.
-                    </div>
+                        <link rel="manifest" href="./static/manifest.json">
+                        <meta name="theme-color" content="#1E3A8A">
+                        <meta name="mobile-web-app-capable" content="yes">
+                         <meta name="apple-mobile-web-app-capable" content="yes">
+                         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+                         <link rel="apple-touch-icon" href="./static/appstore-images/android/launchericon-192.png">
                     """, unsafe_allow_html=True)
 
                     bulk_c1, bulk_c2, bulk_c3 = st.columns([2, 1.5, 2.5])
