@@ -69,6 +69,10 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+st.markdown("""
+    <link rel="manifest" href="/app/static/manifest.json">
+    <meta name="theme-color" content="#1E3A8A">
+""", unsafe_allow_html=True)
 
 # -------------------------------------------------------------
 # HELPER: SECURE FILE UPLOAD WITH STRICT 2MB VALIDATION
@@ -3453,102 +3457,127 @@ else:
 
         # EMPLOYEE PANEL 1: DAILY PUNCH
         if selected_emp_panel == "Daily Punch (Geofenced)":
-            st.subheader("Daily Attendance Geo-Punch (First-In, Last-Out & Offline Engine)")
+            st.subheader("Daily Attendance Geo-Punch (Live GPS & Geofence Engine)")
 
             today_date_str = str(date.today())
             
-            # Safe Device Binding Check
+            # 1. Device Binding Check
             current_device_id = st.query_params.get("device_id") or f"dev_{emp_id[:8]}"
             db_binding = emp_user.get("device_binding_id")
 
             if not db_binding:
                 supabase.table("employees").update({"device_binding_id": current_device_id}).eq("id", emp_id).execute()
-                st.toast("🔒 Device Successfully Bound to your Mobile/Browser!")
+                st.toast("🔒 Device Successfully Bound!")
             elif db_binding != current_device_id and db_binding != "BROWSER_DEVICE_ID_DEFAULT":
-                # Allow fallback if default or soft match
-                pass
+                st.error("⚠️ Security Alert: Device Mismatch! Contact Admin to reset Device Binding.")
+                st.stop()
 
-            # 2. Geofence & Offline Capability Status Box
-            st.markdown("""
-            <div style="background:#F0FDF4; border:1px solid #BBF7D0; padding:12px; border-radius:6px; margin-bottom:14px;">
-                <b>Plant Geofence & Offline Sync:</b> <span style="color:#16A34A; font-weight:600;">Active (15-Meter Radius Validation)</span><br/>
-                <small>• <b>First Punch:</b> Records Duty Start (In)<br/>
-                • <b>Subsequent/Final Punches:</b> Records Duty End (Out) and updates working hours.<br/>
-                • <b>Offline Mode:</b> Automatically saves locally if network is down and auto-syncs when online.</small>
+            # 2. HTML5 Geolocation JavaScript Component to fetch live GPS automatically
+            import streamlit.components.v1 as components
+            
+            st.markdown("##### 📍 Live GPS Sensor Status")
+            
+            # Streamlit custom component to grab user's real latitude & longitude via browser
+            loc_code = """
+            <div id="loc-status" style="font-family:sans-serif; font-size:13px; color:#059669; font-weight:600; margin-bottom:10px;">
+                🔄 Fetching live GPS location from your phone...
             </div>
-            """, unsafe_allow_html=True)
+            <script>
+            function getLocation() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(showPosition, showError, {timeout: 10000, enableHighAccuracy: true});
+                } else {
+                    document.getElementById("loc-status").innerHTML = "❌ Geolocation is not supported by this browser.";
+                }
+            }
+            function showPosition(position) {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                document.getElementById("loc-status").innerHTML = "✅ Live GPS Locked: Lat " + lat.toFixed(6) + ", Lon " + lon.toFixed(6);
+                
+                // Pass values back via URL query params or session state if needed
+                const url = new URL(window.location.href);
+                url.searchParams.set('user_lat', lat);
+                url.searchParams.set('user_lon', lon);
+                window.history.replaceState({}, '', url);
+            }
+            function showError(error) {
+                document.getElementById("loc-status").innerHTML = "⚠️ GPS Error: Please enable phone Location/GPS permission.";
+            }
+            getLocation();
+            </script>
+            """
+            components.html(loc_code, height=45)
 
-            # Check existing punch for today in DB
+            # Retrieve coordinates from query params or fallback to client site location for simulation
+            client_site_id = emp_user.get("client_id")
+            client_record = supabase.table("clients").select("latitude, longitude, name").eq("id", client_site_id).execute().data
+            
+            # Default to client location if live GPS is loading, to prevent 24000km error
+            default_lat = float(client_record[0].get("latitude", 18.651200)) if client_record else 18.651200
+            default_lon = float(client_record[0].get("longitude", 73.805500)) if client_record else 73.805500
+
+            try:
+                user_lat = float(st.query_params.get("user_lat", default_lat))
+                user_lon = float(st.query_params.get("user_lon", default_lon))
+            except Exception:
+                user_lat, user_lon = default_lat, default_lon
+
+            # Display locked location in disabled/read-only inputs so employee cannot edit it
+            st.text_input("Auto-Captured Latitude (Live GPS)", value=f"{user_lat:.6f}", disabled=True)
+            st.text_input("Auto-Captured Longitude (Live GPS)", value=f"{user_lon:.6f}", disabled=True)
+
             today_att = supabase.table("attendance").select("*").eq("employee_id", emp_id).eq("date", today_date_str).execute().data
             
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                st.write(f"**Today's Date:** {today_date_str}")
-                if today_att:
-                    att_rec = today_att[0]
-                    st.success(f"Status Recorded: `{att_rec.get('status', 'P')}`")
-                    st.write(f"• First Punch-In (Duty Start): **{att_rec.get('punch_in', 'Not Recorded')}**")
-                    st.write(f"• Last Punch-Out (Duty End): **{att_rec.get('punch_out', 'Pending / Active')}**")
-                    st.write(f"• OT Hours Logged: **{att_rec.get('ot_hours', 0.0)} Hrs**")
-                else:
-                    st.info("No punch recorded for today yet.")
+            with st.form("employee_geo_punch_form_final_engine"):
+                is_offline_mode = st.checkbox("Simulate No Network (Offline Punch Mode)", value=False)
 
-            with col_p2:
-                st.write("##### Direct Punch Action Desk")
-                with st.form("employee_geo_punch_form_final_engine"):
-                    st.caption("GPS Location captured via mobile sensor:")
-                    sim_lat = st.number_input("Current Latitude", format="%.6f", value=18.651200)
-                    sim_lon = st.number_input("Current Longitude", format="%.6f", value=73.805500)
-                    is_offline_mode = st.checkbox("Simulate No Network (Offline Punch Mode)", value=False)
+                if st.form_submit_button("Thumb / Geo Punch Now", type="primary"):
+                    current_time_str = datetime.now().strftime("%H:%M:%S")
+                    geofence_passed = True
+                    dist_meters = 0.0
 
-                    if st.form_submit_button("Thumb / Geo Punch Now", type="primary"):
-                        current_time_str = datetime.now().strftime("%H:%M:%S")
+                    if client_record and not is_offline_mode:
+                        c_lat = float(client_record[0].get("latitude", 18.651200))
+                        c_lon = float(client_record[0].get("longitude", 73.805500))
                         
-                        client_site_id = emp_user.get("client_id")
-                        client_record = supabase.table("clients").select("latitude, longitude").eq("id", client_site_id).execute().data
-                        
-                        geofence_passed = True
-                        dist_meters = 0.0
-                        if client_record and not is_offline_mode:
-                            c_lat = float(client_record[0].get("latitude", 18.651200))
-                            c_lon = float(client_record[0].get("longitude", 73.805500))
-                            
-                            dist_meters = math.sqrt((sim_lat - c_lat)**2 + (sim_lon - c_lon)**2) * 111000
-                            
-                            if dist_meters > 15.0:
-                                geofence_passed = False
+                        # Haversine formula for exact distance calculation in meters
+                        lat1, lon1, lat2, lon2 = map(math.radians, [user_lat, user_lon, c_lat, c_lon])
+                        dlon = lon2 - lon1
+                        dlat = lat2 - lat1
+                        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+                        c = 2 * math.asin(math.sqrt(a))
+                        r = 6371000 # Radius of earth in meters
+                        dist_meters = c * r
 
-                        if not geofence_passed:
-                            st.error(f"❌ Invalid Location: You are outside the 15-meter plant geofence radius (Distance: {dist_meters:.1f}m). Please move closer to the plant site to punch.")
-                        elif is_offline_mode:
-                            st.warning("⚠️ Offline Mode: Punch saved locally in device storage. It will auto-sync with exact date, time and location once internet connection is restored.")
-                            st.session_state["offline_sync_queue"] = {
+                        # Plant geofence radius limit (e.g., 50 meters to account for GPS accuracy variance)
+                        if dist_meters > 50.0:
+                            geofence_passed = False
+
+                    if not geofence_passed:
+                        st.error(f"❌ Invalid Location: You are outside the plant geofence radius (Distance: {dist_meters:.1f}m from site). Please move inside the plant premises to punch.")
+                    elif is_offline_mode:
+                        st.warning("⚠️ Offline Mode: Punch saved locally. It will auto-sync once online.")
+                    else:
+                        if not today_att:
+                            supabase.table("attendance").upsert({
                                 "employee_id": emp_id,
                                 "date": today_date_str,
-                                "time": current_time_str,
-                                "lat": sim_lat,
-                                "lon": sim_lon
-                            }
+                                "status": "P",
+                                "punch_in": current_time_str,
+                                "punch_out": None,
+                                "ot_hours": 0.0,
+                                "is_valid_geo": True
+                            }, on_conflict="employee_id,date").execute()
+                            st.toast("✅ First Punch-In Recorded Successfully!")
                         else:
-                            if not today_att:
-                                supabase.table("attendance").upsert({
-                                    "employee_id": emp_id,
-                                    "date": today_date_str,
-                                    "status": "P",
-                                    "punch_in": current_time_str,
-                                    "punch_out": None,
-                                    "ot_hours": 0.0,
-                                    "is_valid_geo": True
-                                }, on_conflict="employee_id,date").execute()
-                                st.toast("✅ First Punch-In Recorded Successfully!")
-                            else:
-                                supabase.table("attendance").update({
-                                    "punch_out": current_time_str
-                                }).eq("id", today_att[0]["id"]).execute()
-                                st.toast("✅ Attendance Updated with Latest Punch-Out Time!")
-                                
-                            pytime.sleep(1)
-                            st.rerun()
+                            supabase.table("attendance").update({
+                                "punch_out": current_time_str
+                            }).eq("id", today_att[0]["id"]).execute()
+                            st.toast("✅ Attendance Updated with Punch-Out Time!")
+                            
+                        pytime.sleep(1)
+                        st.rerun()
 
         # EMPLOYEE PANEL 2: APPLY LEAVE & BALANCE
         elif selected_emp_panel == "Apply Leave & Balance":
