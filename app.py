@@ -977,12 +977,15 @@ else:
             c_rev_map = {c["id"]: c["name"] for c in cli_list}
 
             if cands:
-                # 👇 Yethe dropdown sathi candidate map tayar kela ahe
-                cand_map = {f"{c['full_name']} (Mobile: {c['phone_number']} | Applied: {str(c.get('created_at'))[:10]})": c for c in cands}
-                sel_c_label = st.selectbox("Select Candidate to Review *", list(cand_map.keys()))
+                # 👇 Khup sare candidates aslyamule yithe dropdown tayar kela ahe
+                cand_map = {
+                    f"[{c.get('employee_code', 'NEW')}] {c.get('full_name')} (Mobile: {c.get('phone_number')} | Applied: {str(c.get('created_at'))[:10]})": c 
+                    for c in cands
+                }
+                sel_c_label = st.selectbox("Select Pending Candidate to Review *", list(cand_map.keys()), key="admin_cand_dropdown")
                 cand = cand_map[sel_c_label]
 
-                with st.form("admin_review_cand_form"):
+                with st.form(f"admin_review_cand_form_{cand['id']}"):
                     st.write("##### Section A: Login Credentials & Identifiers")
                     ac1, ac2, ac3 = st.columns(3)
                     set_code = ac1.text_input("Employee Code *", value=cand.get("employee_code") or "").strip().upper()
@@ -1028,7 +1031,7 @@ else:
                     set_cat = sc5.selectbox("Category *", cat_opts, index=cat_idx)
                     set_ot = sc6.number_input("Custom OT Rate / Hour (Rs.)", min_value=0.0, step=10.0, value=float(cand.get("ot_rate_per_hour") or 0.0))
 
-                    st.write("##### Section D: Personal, Identification & Bank Details (Editable Audit)")
+                    st.write("##### Section D: Personal, Identification & Bank Details")
                     pd1, pd2, pd3 = st.columns(3)
                     set_name = pd1.text_input("Full Name *", value=cand.get("full_name", ""))
                     set_father = pd2.text_input("Father's Name", value=cand.get("father_name", ""))
@@ -1044,7 +1047,7 @@ else:
                     set_addr = st.text_area("Permanent Address *", value=cand.get("permanent_address", ""))
 
                     st1, st2, st3, st4 = st.columns(4)
-                    set_aadhar = st1.text_input("Aadhaar Number *", value=str(cand.get("aadhar_number") or ""))
+                    set_aadhar = st1.text_input("Aadhaar Number *", value="[Aadhaar Redacted]")
                     set_pan = st2.text_input("PAN Number", value=cand.get("pan_number", ""))
                     set_uan = st3.text_input("UAN Number", value=cand.get("uan_number", ""))
                     set_esic = st4.text_input("ESIC Number", value=cand.get("esic_number", ""))
@@ -1059,16 +1062,10 @@ else:
                     doc_v1, doc_v2 = st.columns(2)
                     with doc_v1:
                         if cand.get("photo_file"): st.markdown(f"📷 [Passport Size Photo Preview]({cand['photo_file']})")
-                        else: st.caption("Passport Photo: Not Attached")
                         if cand.get("aadhar_file"): st.markdown(f"📄 [Aadhaar Card Copy]({cand['aadhar_file']})")
-                        else: st.caption("Aadhaar Card: Not Attached")
                     with doc_v2:
                         if cand.get("pan_file"): st.markdown(f"📄 [PAN Card Copy]({cand['pan_file']})")
-                        else: st.caption("PAN Card: Not Attached")
                         if cand.get("bank_file"): st.markdown(f"📄 [Bank Passbook / Cheque]({cand['bank_file']})")
-                        else: st.caption("Bank Proof: Not Attached")
-
-                    st.caption(f"Digital Signature Confirmation: **{cand.get('signature_data') or 'Confirmed at Onboarding'}**")
 
                     st.write("---")
                     st.write("##### 3. Decision & Two-Way Rejection Action")
@@ -1106,14 +1103,23 @@ else:
                                 update_leave_accrual(cand["id"])
                                 st.cache_data.clear()
 
+                                # 👇 ऑटोमॅटिक पॉप-अप ऐवजी आता थेट एका क्लिकवर चालणारे WhatsApp बटन सेव्ह झाले आहे
                                 msg = f"Hello {set_name}, Welcome to {set_ent}! Your ESS Portal credentials are: User ID: {set_uid}, Password: {set_pwd}. Login here: https://employeeselfservice.streamlit.app/"
                                 wa_url = f"https://wa.me/91{set_phone}?text={urllib.parse.quote(msg)}"
                                 
                                 st.toast("✅ Candidate Approved & Activated!")
-                                st.success("Candidate approved! Dispatching credentials to WhatsApp.")
-                                st.markdown(f'<meta http-equiv="refresh" content="0; url={wa_url}">', unsafe_allow_html=True)
-                                st.markdown(f'<a href="{wa_url}" target="_blank" style="display:inline-block; background-color:#25D366; color:white; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold;">Click here if WhatsApp did not open automatically</a>', unsafe_allow_html=True)
-                                pytime.sleep(2)
+                                st.success("Candidate approved successfully! You can send credentials via WhatsApp below:")
+                                
+                                # युजरच्या क्लिकवर चालणारे सुरक्षित बटन
+                                st.markdown(f'''
+                                <div style="margin-top: 15px; margin-bottom: 15px;">
+                                    <a href="{wa_url}" target="_blank" style="background-color: #25D366; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                        💬 Send Credentials via WhatsApp
+                                    </a>
+                                </div>
+                                ''', unsafe_allow_html=True)
+                                
+                                pytime.sleep(1)
                                 st.rerun()
 
                     if btn_reject:
