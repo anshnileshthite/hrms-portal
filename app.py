@@ -1669,19 +1669,25 @@ else:
             st.subheader("Shift Roster Management (Bulk & Individual Deployment)")
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
-            if sup_ent_id:
-                cli_list = [c for c in cli_list if c.get("entity_id") == sup_ent_id]
+            
+            # Safe check for supervisor variables to prevent NameError in Admin portal
+            _sup_ent_id = locals().get("sup_ent_id", None)
+            _sup_cli_id = locals().get("sup_cli_id", None)
+            _sup_id = locals().get("sup_id", None)
 
-            # He variable aadhi safe define karun thevane garche ahe
+            if _sup_ent_id:
+                cli_list = [c for c in cli_list if c.get("entity_id") == _sup_ent_id]
+
             assigned_client_ids = []
-            if sup_id:
-                sup_cli_res = supabase.table("supervisor_clients").select("client_id").eq("supervisor_id", sup_id).execute().data or []
+            if _sup_id:
+                sup_cli_res = supabase.table("supervisor_clients").select("client_id").eq("supervisor_id", _sup_id).execute().data or []
                 assigned_client_ids = [sc["client_id"] for sc in sup_cli_res]
 
             if assigned_client_ids:
                 cli_list = [c for c in cli_list if c.get("id") in assigned_client_ids]
-            elif sup_cli_id:
-                cli_list = [c for c in cli_list if c.get("id") == sup_cli_id]
+            elif _sup_cli_id:
+                cli_list = [c for c in cli_list if c.get("id") == _sup_cli_id]
+
             e_map = {e["name"]: e["id"] for e in ent_list}
             c_map = {c["name"]: c["id"] for c in cli_list}
 
@@ -1696,11 +1702,11 @@ else:
 
             target_dates = []
             if sel_scope == "Full Month":
-             r_month_input = st.date_input("Select Target Month (Any date in month)", value=date.today())
-             yr = r_month_input.year
-             mo = r_month_input.month
-             days_in_m = 31 if mo in [1,3,5,7,8,10,12] else (30 if mo != 2 else (29 if yr % 4 == 0 else 28))
-             target_dates = [str(date(yr, mo, d)) for d in range(1, days_in_m + 1)]
+               r_month_input = st.date_input("Select Target Month (Any date in month)", value=date.today())
+               yr = r_month_input.year
+               mo = r_month_input.month
+               days_in_m = 31 if mo in [1,3,5,7,8,10,12] else (30 if mo != 2 else (29 if yr % 4 == 0 else 28))
+               target_dates = [str(date(yr, mo, d)) for d in range(1, days_in_m + 1)]
             elif sel_scope == "Weekly Range (7 Days)":
                week_start = st.date_input("Select Week Start Date (Monday / Any day)", value=date.today())
                target_dates = [str(week_start + timedelta(days=i)) for i in range(7)]
