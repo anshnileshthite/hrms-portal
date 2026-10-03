@@ -2950,7 +2950,17 @@ else:
             if sup_ent_id:
                 cli_list = [c for c in cli_list if c.get("entity_id") == sup_ent_id]
             if sup_cli_id:
-                cli_list = [c for c in cli_list if c.get("id") == sup_cli_id]
+                # Supervisor ला नेमणूक केलेले सर्व Client IDs फेच करणे
+                assigned_client_ids = []
+                if sup_id:
+                  sup_cli_res = supabase.table("supervisor_clients").select("client_id").eq("supervisor_id", sup_id).execute().data or []
+                  assigned_client_ids = [sc["client_id"] for sc in sup_cli_res]
+
+# जर एकापेक्षा जास्त clients असतील तर त्यांची यादी फिल्टर करणे
+            if assigned_client_ids:
+              cli_list = [c for c in cli_list if c.get("id") in assigned_client_ids]
+            elif sup_cli_id:
+              cli_list = [c for c in cli_list if c.get("id") == sup_cli_id]
 
             c_dict = {c["name"]: c["id"] for c in cli_list}
             sel_s_cli = st.selectbox("Select Assigned Plant Site *", list(c_dict.keys()) if c_dict else ["No Client Assigned"])
