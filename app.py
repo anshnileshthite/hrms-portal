@@ -1669,6 +1669,19 @@ else:
             st.subheader("Shift Roster Management (Bulk & Individual Deployment)")
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
+            if sup_ent_id:
+                cli_list = [c for c in cli_list if c.get("entity_id") == sup_ent_id]
+
+            # He variable aadhi safe define karun thevane garche ahe
+            assigned_client_ids = []
+            if sup_id:
+                sup_cli_res = supabase.table("supervisor_clients").select("client_id").eq("supervisor_id", sup_id).execute().data or []
+                assigned_client_ids = [sc["client_id"] for sc in sup_cli_res]
+
+            if assigned_client_ids:
+                cli_list = [c for c in cli_list if c.get("id") in assigned_client_ids]
+            elif sup_cli_id:
+                cli_list = [c for c in cli_list if c.get("id") == sup_cli_id]
             e_map = {e["name"]: e["id"] for e in ent_list}
             c_map = {c["name"]: c["id"] for c in cli_list}
 
