@@ -1047,7 +1047,7 @@ else:
                     set_addr = st.text_area("Permanent Address *", value=cand.get("permanent_address", ""))
 
                     st1, st2, st3, st4 = st.columns(4)
-                    set_aadhar = st1.text_input("Aadhaar Number *", value="[Aadhaar Redacted]")
+                    set_aadhar = st.text_input("Aadhaar Number *", value=str(curr_emp.get("aadhar_number") or ""))
                     set_pan = st2.text_input("PAN Number", value=cand.get("pan_number", ""))
                     set_uan = st3.text_input("UAN Number", value=cand.get("uan_number", ""))
                     set_esic = st4.text_input("ESIC Number", value=cand.get("esic_number", ""))
@@ -1155,7 +1155,6 @@ else:
             e_rev_map = {e["id"]: e["name"] for e in ent_list}
             c_rev_map = {c["id"]: c["name"] for c in cli_list}
             
-            # सुरक्षितपणे सर्व employees फेच करणे
             all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
 
             with tab_add_emp:
@@ -1168,30 +1167,30 @@ else:
 
                     st.write("##### Section B: Organization")
                     b1, b2 = st.columns(2)
-                    ne_ent = b1.selectbox("Entity / Firm *", options=list(e_map.keys()) if e_map else ["No Entity"])
-                    ne_cli = b2.selectbox("Client Work Site *", options=list(c_map.keys()) if c_map else ["No Client"])
+                    ne_ent = b1.selectbox("Entity / Firm *", options=list(e_map.keys()) if e_map else ["No Entity"], key="add_emp_ent")
+                    ne_cli = b2.selectbox("Client Work Site *", options=list(c_map.keys()) if c_map else ["No Client"], key="add_emp_cli")
                     b3, b4 = st.columns(2)
                     ne_dept = b3.text_input("Department", value="Facility")
                     ne_zone = b4.text_input("Zone", value="Zone - 3")
 
                     st.write("##### Section C: Shift & Rates")
                     c1, c2, c3 = st.columns(3)
-                    ne_shift = c1.selectbox("Shift Timing *", STANDARD_SHIFTS)
-                    ne_wo = c2.selectbox("Weekly Off *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
-                    ne_join = c3.date_input("Joining Date *", value=date.today(), format="DD/MM/YYYY")
+                    ne_shift = c1.selectbox("Shift Timing *", STANDARD_SHIFTS, key="add_emp_shift")
+                    ne_wo = c2.selectbox("Weekly Off *", ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], key="add_emp_wo")
+                    ne_join = c3.date_input("Joining Date *", value=date.today(), format="DD/MM/YYYY", key="add_emp_join")
                     c4, c5, c6 = st.columns(3)
                     ne_desig = c4.text_input("Designation *", value="Associate")
-                    ne_cat = c5.selectbox("Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1)
+                    ne_cat = c5.selectbox("Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key="add_emp_cat")
                     ne_ot = c6.number_input("Custom OT Rate / Hour", min_value=0.0, step=10.0, value=0.0)
 
                     st.write("##### Section D: Personal & Contact")
                     d1, d2, d3 = st.columns(3)
                     ne_name = d1.text_input("Full Name *")
                     ne_father = d2.text_input("Father's Name")
-                    ne_gender = d3.selectbox("Gender *", ["Male", "Female", "Other"])
+                    ne_gender = d3.selectbox("Gender *", ["Male", "Female", "Other"], key="add_emp_gender")
                     d4, d5, d6 = st.columns(3)
-                    ne_dob = d4.date_input("DOB *", value=date(1995, 1, 1), format="DD/MM/YYYY")
-                    ne_marital = d5.selectbox("Marital Status", ["Single", "Married"])
+                    ne_dob = d4.date_input("DOB *", value=date(1995, 1, 1), format="DD/MM/YYYY", key="add_emp_dob")
+                    ne_marital = d5.selectbox("Marital Status", ["Single", "Married"], key="add_emp_marital")
                     ne_phone = d6.text_input("Mobile Number *")
                     d7, d8 = st.columns(2)
                     ne_emg = d7.text_input("Emergency Contact")
@@ -1229,7 +1228,7 @@ else:
                                     "full_name": ne_name, "father_name": ne_father, "gender": ne_gender,
                                     "dob": str(ne_dob), "marital_status": ne_marital, "phone_number": ne_phone,
                                     "emergency_contact": ne_emg, "permanent_address": ne_addr,
-                                    "aadhar_number": "[Aadhaar Redacted]", "pan_number": ne_pan, "uan_number": ne_uan,
+                                    "aadhar_number": ne_aadhar, "pan_number": ne_pan, "uan_number": ne_uan,
                                     "esic_number": ne_esic, "bank_name": ne_bank, "bank_branch": ne_branch,
                                     "bank_account_no": ne_acc, "ifsc_code": ne_ifsc,
                                     "role": "employee", "status": "APPROVED"
@@ -1245,11 +1244,10 @@ else:
             with tab_edit_emp:
                 if all_emps:
                     emp_opt_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (ID: {e['id'][:6]})": e for e in all_emps}
-                    sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()), key="edit_emp_select_box")
+                    sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()), key="edit_emp_select_box_master")
                     
                     curr_emp = emp_opt_map.get(sel_emp_to_edit)
 
-                    # 👈 हा सेफ्टी चेक AttributeError १००% रोखेल
                     if not curr_emp:
                         st.info("Krupaya eka valid employee la select kara.")
                         st.stop()
@@ -1257,79 +1255,85 @@ else:
                     with st.form("edit_emp_100pct_form"):
                         st.write("##### 1. Login Details")
                         u1, u2, u3 = st.columns(3)
-                        ue_code = u1.text_input("Employee Code", value=curr_emp.get("employee_code", "")).strip().upper()
-                        ue_uid = u2.text_input("User ID", value=curr_emp.get("user_id", ""))
-                        ue_pwd = u3.text_input("Portal Password", value=curr_emp.get("password", ""))
+                        ue_code = u1.text_input("Employee Code", value=str(curr_emp.get("employee_code") or "")).strip().upper()
+                        ue_uid = u2.text_input("User ID", value=str(curr_emp.get("user_id") or ""))
+                        ue_pwd = u3.text_input("Portal Password", value=str(curr_emp.get("password") or ""))
 
                         st.write("##### 2. Deployment")
                         d_c1, d_c2 = st.columns(2)
                         c_ent_name = e_rev_map.get(curr_emp.get("entity_id"))
                         ent_opts = list(e_map.keys())
                         ent_idx = ent_opts.index(c_ent_name) if c_ent_name in ent_opts else 0
-                        ue_ent = d_c1.selectbox("Entity / Firm *", ent_opts if ent_opts else ["No Entity"], index=ent_idx)
+                        ue_ent = d_c1.selectbox("Entity / Firm *", ent_opts if ent_opts else ["No Entity"], index=ent_idx, key="edit_ent_sel")
 
                         c_cli_name = c_rev_map.get(curr_emp.get("client_id"))
                         cli_opts = list(c_map.keys())
                         cli_idx = cli_opts.index(c_cli_name) if c_cli_name in cli_opts else 0
-                        ue_cli = d_c2.selectbox("Client Work Site *", cli_opts if cli_opts else ["No Client"], index=cli_idx)
+                        ue_cli = d_c2.selectbox("Client Work Site *", cli_opts if cli_opts else ["No Client"], index=cli_idx, key="edit_cli_sel")
 
                         d_c3, d_c4 = st.columns(2)
-                        ue_dept = d_c3.text_input("Department", value=curr_emp.get("department") or "Facility")
-                        ue_zone = d_c4.text_input("Zone", value=curr_emp.get("zone") or "Zone - 3")
+                        ue_dept = d_c3.text_input("Department", value=str(curr_emp.get("department") or "Facility"))
+                        ue_zone = d_c4.text_input("Zone", value=str(curr_emp.get("zone") or "Zone - 3"))
 
                         st.write("##### 3. Shift & Commercials")
                         s_c1, s_c2, s_c3 = st.columns(3)
                         curr_shift = curr_emp.get("shift_timing") or STANDARD_SHIFTS[0]
                         shift_idx = STANDARD_SHIFTS.index(curr_shift) if curr_shift in STANDARD_SHIFTS else 0
-                        ue_shift = s_c1.selectbox("Assigned Shift *", STANDARD_SHIFTS, index=shift_idx)
+                        ue_shift = s_c1.selectbox("Assigned Shift *", STANDARD_SHIFTS, index=shift_idx, key="edit_shift_sel")
 
                         wo_opts = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
                         curr_wo = curr_emp.get("weekly_off_day") or "Sunday"
                         wo_idx = wo_opts.index(curr_wo) if curr_wo in wo_opts else 0
-                        ue_wo = s_c2.selectbox("Weekly Off Day *", wo_opts, index=wo_idx)
+                        ue_wo = s_c2.selectbox("Weekly Off Day *", wo_opts, index=wo_idx, key="edit_wo_sel")
 
                         raw_j = curr_emp.get("joining_date") or curr_emp.get("created_at")
-                        def_j = datetime.strptime(str(raw_j).split("T")[0], "%Y-%m-%d").date() if raw_j else date.today()
-                        ue_join = s_c3.date_input("Joining Date *", value=def_j, format="DD/MM/YYYY")
+                        try:
+                            def_j = datetime.strptime(str(raw_j).split("T")[0], "%Y-%m-%d").date() if raw_j else date.today()
+                        except Exception:
+                            def_j = date.today()
+                        ue_join = s_c3.date_input("Joining Date *", value=def_j, format="DD/MM/YYYY", key="edit_join_date")
 
                         s_c4, s_c5, s_c6 = st.columns(3)
-                        ue_desig = s_c4.text_input("Designation *", value=curr_emp.get("designation") or "Associate")
+                        ue_desig = s_c4.text_input("Designation *", value=str(curr_emp.get("designation") or "Associate"))
                         cat_opts = ["Skilled", "Semi-Skilled", "Unskilled"]
                         curr_cat = curr_emp.get("category") or "Semi-Skilled"
                         cat_idx = cat_opts.index(curr_cat) if curr_cat in cat_opts else 1
-                        ue_cat = s_c5.selectbox("Category *", cat_opts, index=cat_idx)
+                        ue_cat = s_c5.selectbox("Category *", cat_opts, index=cat_idx, key="edit_cat_sel")
                         ue_ot = s_c6.number_input("Custom OT Rate / Hour", min_value=0.0, step=10.0, value=float(curr_emp.get("ot_rate_per_hour") or 0.0))
 
                         st.write("##### 4. Personal Info")
                         p_c1, p_c2, p_c3 = st.columns(3)
-                        ue_name = p_c1.text_input("Full Name *", value=curr_emp.get("full_name", ""))
-                        ue_father = p_c2.text_input("Father's Name", value=curr_emp.get("father_name", ""))
-                        ue_gender = p_c3.selectbox("Gender", ["Male", "Female", "Other"], index=["Male", "Female", "Other"].index(curr_emp.get("gender", "Male")) if curr_emp.get("gender") in ["Male", "Female", "Other"] else 0)
+                        ue_name = p_c1.text_input("Full Name *", value=str(curr_emp.get("full_name") or ""))
+                        ue_father = p_c2.text_input("Father's Name", value=str(curr_emp.get("father_name") or ""))
+                        ue_gender = p_c3.selectbox("Gender", ["Male", "Female", "Other"], index=["Male", "Female", "Other"].index(curr_emp.get("gender", "Male")) if curr_emp.get("gender") in ["Male", "Female", "Other"] else 0, key="edit_gender_sel")
 
                         p_c4, p_c5, p_c6 = st.columns(3)
                         raw_dob = curr_emp.get("dob")
-                        def_dob = datetime.strptime(str(raw_dob).split("T")[0], "%Y-%m-%d").date() if raw_dob else date(1995, 1, 1)
-                        ue_dob = p_c4.date_input("Date of Birth (DOB)", value=def_dob, format="DD/MM/YYYY")
-                        ue_marital = p_c5.selectbox("Marital Status", ["Single", "Married"], index=0 if curr_emp.get("marital_status") == "Single" else 1)
-                        ue_phone = p_c6.text_input("Mobile Number *", value=curr_emp.get("phone_number", ""))
+                        try:
+                            def_dob = datetime.strptime(str(raw_dob).split("T")[0], "%Y-%m-%d").date() if raw_dob else date(1995, 1, 1)
+                        except Exception:
+                            def_dob = date(1995, 1, 1)
+                        ue_dob = p_c4.date_input("Date of Birth (DOB)", value=def_dob, format="DD/MM/YYYY", key="edit_dob_date")
+                        ue_marital = p_c5.selectbox("Marital Status", ["Single", "Married"], index=0 if curr_emp.get("marital_status") == "Single" else 1, key="edit_marital_sel")
+                        ue_phone = p_c6.text_input("Mobile Number *", value=str(curr_emp.get("phone_number") or ""))
 
                         p_c7, p_c8 = st.columns(2)
-                        ue_emg = p_c7.text_input("Emergency Contact", value=curr_emp.get("emergency_contact", ""))
-                        ue_addr = p_c8.text_area("Permanent Address *", value=curr_emp.get("permanent_address", ""))
+                        ue_emg = p_c7.text_input("Emergency Contact", value=str(curr_emp.get("emergency_contact") or ""))
+                        ue_addr = p_c8.text_area("Permanent Address *", value=str(curr_emp.get("permanent_address") or ""))
 
-                        st.write("##### 5. Statutory & Identification")
+                        st.write("##### 5. Statutory & Identification (Aadhaar Visible)")
                         st1, st2, st3, st4 = st.columns(4)
-                        ue_aadhar = st1.text_input("Aadhaar Number *", value="[Aadhaar Redacted]")
-                        ue_pan = st2.text_input("PAN Number", value=curr_emp.get("pan_number", ""))
-                        ue_uan = st3.text_input("UAN Number", value=curr_emp.get("uan_number", ""))
-                        ue_esic = st4.text_input("ESIC Number", value=curr_emp.get("esic_number", ""))
+                        ue_aadhar = st1.text_input("Aadhaar Number *", value=str(curr_emp.get("aadhar_number") or ""))
+                        ue_pan = st2.text_input("PAN Number", value=str(curr_emp.get("pan_number") or ""))
+                        ue_uan = st3.text_input("UAN Number", value=str(curr_emp.get("uan_number") or ""))
+                        ue_esic = st4.text_input("ESIC Number", value=str(curr_emp.get("esic_number") or ""))
 
                         st.write("##### 6. Bank Account Details")
                         bk1, bk2, bk3, bk4 = st.columns(4)
-                        ue_bank = bk1.text_input("Bank Name", value=curr_emp.get("bank_name", ""))
-                        ue_branch = bk2.text_input("Branch Name", value=curr_emp.get("bank_branch", ""))
-                        ue_acc = bk3.text_input("Bank Account Number", value=curr_emp.get("bank_account_no", ""))
-                        ue_ifsc = bk4.text_input("IFSC Code", value=curr_emp.get("ifsc_code", ""))
+                        ue_bank = bk1.text_input("Bank Name", value=str(curr_emp.get("bank_name") or ""))
+                        ue_branch = bk2.text_input("Branch Name", value=str(curr_emp.get("bank_branch") or ""))
+                        ue_acc = bk3.text_input("Bank Account Number", value=str(curr_emp.get("bank_account_no") or ""))
+                        ue_ifsc = bk4.text_input("IFSC Code", value=str(curr_emp.get("ifsc_code") or ""))
 
                         if st.form_submit_button("Update Employee Record", type="primary"):
                             if ue_code:
@@ -1348,7 +1352,7 @@ else:
                                 "full_name": ue_name, "father_name": ue_father, "gender": ue_gender,
                                 "dob": str(ue_dob), "marital_status": ue_marital, "phone_number": ue_phone,
                                 "emergency_contact": ue_emg, "permanent_address": ue_addr,
-                                "aadhar_number": "[Aadhaar Redacted]", "pan_number": ue_pan, "uan_number": ue_uan,
+                                "aadhar_number": ue_aadhar, "pan_number": ue_pan, "uan_number": ue_uan,
                                 "esic_number": ue_esic, "bank_name": ue_bank, "bank_branch": ue_branch,
                                 "bank_account_no": ue_acc, "ifsc_code": ue_ifsc
                             }).eq("id", curr_emp["id"]).execute()
@@ -1364,7 +1368,7 @@ else:
                 st.write("##### Complete 6-Documents Vault (Upload + Preview / Download with Max 2MB)")
                 if all_emps:
                     emp_lookup = {f"[{emp.get('employee_code', 'TEMP')}] {emp.get('full_name')}": emp for emp in all_emps}
-                    sel_v_emp = st.selectbox("Select Employee for Documents Vault *", list(emp_lookup.keys()))
+                    sel_v_emp = st.selectbox("Select Employee for Documents Vault *", list(emp_lookup.keys()), key="vault_emp_select_unique")
                     v_emp = emp_lookup[sel_v_emp]
                     v_id = v_emp["id"]
 
@@ -1377,20 +1381,20 @@ else:
                     with v1:
                         st.markdown("##### 1. Official Offer Letter")
                         offer_pdf = generate_official_offer_letter(v_emp, v_ent_obj, v_cli_name, v_sal_rule)
-                        st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_off_{v_id}")
+                        st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"vault_dl_off_{v_id}")
                         
-                        up_custom_offer = st.file_uploader("Upload Signed Custom Offer Letter (Max 2MB)", type=["pdf", "jpg", "png"], key=f"up_custom_off_{v_id}")
-                        if st.button("Save Custom Offer Letter", key=f"btn_cust_off_{v_id}"):
+                        up_custom_offer = st.file_uploader("Upload Signed Custom Offer Letter (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_up_custom_off_{v_id}")
+                        if st.button("Save Custom Offer Letter", key=f"vault_btn_cust_off_{v_id}"):
                             if up_custom_offer and upload_employee_doc(up_custom_offer, v_id, "offer"):
                                 st.success("Custom Offer Letter uploaded!")
                                 st.rerun()
 
                     with v2:
                         st.markdown("##### 2. ESIC Certificate / Card")
-                        st.download_button("Download ESIC Certificate (PDF)", data=b"ESIC Certificate Document", file_name=f"ESIC_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_esic_{v_id}")
+                        st.download_button("Download ESIC Certificate (PDF)", data=b"ESIC Certificate Document", file_name=f"ESIC_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"vault_dl_esic_{v_id}")
                         
-                        up_esic_doc = st.file_uploader("Upload Manual ESIC Card / Document (Max 2MB)", type=["pdf", "jpg", "png"], key=f"up_esic_doc_{v_id}")
-                        if st.button("Save ESIC Document", key=f"btn_esic_doc_{v_id}"):
+                        up_esic_doc = st.file_uploader("Upload Manual ESIC Card / Document (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_up_esic_doc_{v_id}")
+                        if st.button("Save ESIC Document", key=f"vault_btn_esic_doc_{v_id}"):
                             if up_esic_doc and upload_employee_doc(up_esic_doc, v_id, "esic"):
                                 st.success("ESIC Document uploaded!")
                                 st.rerun()
@@ -1401,8 +1405,8 @@ else:
                     with d_c1:
                         st.markdown("##### 3. Passport Size Photo")
                         if v_emp.get("photo_file"): st.markdown(f"📷 [View Current Photo]({v_emp['photo_file']})")
-                        up_ph = st.file_uploader("Upload New Photo (Max 2MB)", type=["jpg", "png"], key=f"v_ph_{v_id}")
-                        if st.button("Save Photo", key=f"btn_ph_{v_id}"):
+                        up_ph = st.file_uploader("Upload New Photo (Max 2MB)", type=["jpg", "png"], key=f"vault_v_ph_{v_id}")
+                        if st.button("Save Photo", key=f"vault_btn_ph_{v_id}"):
                             if up_ph and upload_employee_doc(up_ph, v_id, "photo"):
                                 st.success("Photo uploaded!")
                                 st.rerun()
@@ -1410,8 +1414,8 @@ else:
                     with d_c2:
                         st.markdown("##### 4. Aadhaar Card Copy")
                         if v_emp.get("aadhar_file"): st.markdown(f"📄 [View Current Aadhaar]({v_emp['aadhar_file']})")
-                        up_adh = st.file_uploader("Upload New Aadhaar Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_adh_{v_id}")
-                        if st.button("Save Aadhaar Copy", key=f"btn_adh_{v_id}"):
+                        up_adh = st.file_uploader("Upload New Aadhaar Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_v_adh_{v_id}")
+                        if st.button("Save Aadhaar Copy", key=f"vault_btn_adh_{v_id}"):
                             if up_adh and upload_employee_doc(up_adh, v_id, "aadhar"):
                                 st.success("Aadhaar Card uploaded!")
                                 st.rerun()
@@ -1420,8 +1424,8 @@ else:
                     with d_c3:
                         st.markdown("##### 5. PAN Card Copy")
                         if v_emp.get("pan_file"): st.markdown(f"📄 [View Current PAN]({v_emp['pan_file']})")
-                        up_pn = st.file_uploader("Upload New PAN Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_pn_{v_id}")
-                        if st.button("Save PAN Copy", key=f"btn_pn_{v_id}"):
+                        up_pn = st.file_uploader("Upload New PAN Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_v_pn_{v_id}")
+                        if st.button("Save PAN Copy", key=f"vault_btn_pn_{v_id}"):
                             if up_pn and upload_employee_doc(up_pn, v_id, "pan"):
                                 st.success("PAN Card uploaded!")
                                 st.rerun()
@@ -1429,8 +1433,8 @@ else:
                     with d_c4:
                         st.markdown("##### 6. Bank Passbook / Cheque")
                         if v_emp.get("bank_file"): st.markdown(f"📄 [View Current Bank Proof]({v_emp['bank_file']})")
-                        up_bk = st.file_uploader("Upload New Bank Proof (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_bk_{v_id}")
-                        if st.button("Save Bank Proof", key=f"btn_bk_{v_id}"):
+                        up_bk = st.file_uploader("Upload New Bank Proof (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_v_bk_{v_id}")
+                        if st.button("Save Bank Proof", key=f"vault_btn_bk_{v_id}"):
                             if up_bk and upload_employee_doc(up_bk, v_id, "bank"):
                                 st.success("Bank Document uploaded!")
                                 st.rerun()
@@ -1441,138 +1445,7 @@ else:
                 st.write("##### Employee Exit & Deletion Management")
                 if all_emps:
                     emp_del_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (Status: {e.get('status')})": e for e in all_emps}
-                    sel_del_label = st.selectbox("Select Employee for Exit or Deletion *", list(emp_del_map.keys()))
-                    target_emp = emp_del_map[sel_del_label]
-                    target_id = target_emp["id"]
-
-                    st.markdown(f"""
-                    <div style="background-color:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:6px; margin-bottom:15px;">
-                        <b>Employee:</b> {target_emp.get('full_name')} | <b>Code:</b> {target_emp.get('employee_code')}<br/>
-                        <b>Entity:</b> {e_rev_map.get(target_emp.get('entity_id'), 'N/A')} | <b>Client Site:</b> {c_rev_map.get(target_emp.get('client_id'), 'N/A')}<br/>
-                        <b>Current Status:</b> <span style="font-weight:bold; color:#0284C7;">{target_emp.get('status')}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    exit_col, del_col = st.columns(2)
-                    with exit_col:
-                        st.markdown("#### Option A: Mark as LEFT / RESIGNED")
-                        st.caption("Recommended: Employee access is deactivated, but past payroll, attendance and statutory records are permanently preserved.")
-                        with st.form("mark_left_form"):
-                            ex_date = st.date_input("Exit Date / Last Working Day *", value=date.today())
-                            ex_reason = st.selectbox("Reason for Leaving *", ["Resigned", "Absconding", "Terminated", "Medical Grounds", "Contract End", "Other"])
-                            ex_remarks = st.text_area("Exit Remarks")
-                            if st.form_submit_button("Mark Employee as LEFT", type="primary"):
-                                supabase.table("employees").update({
-                                    "status": "LEFT",
-                                    "admin_remarks": f"LEFT on {ex_date} | Reason: {ex_reason} | Remarks: {ex_remarks}"
-                                }).eq("id", target_id).execute()
-                                st.cache_data.clear()
-                                st.toast("✅ Employee marked as LEFT!")
-                                st.success(f"{target_emp.get('full_name')} marked as LEFT. Login access disabled; records safely retained.")
-                                pytime.sleep(1)
-                                st.rerun()
-
-                    with del_col:
-                        st.markdown("#### Option B: Permanent Hard Delete")
-                        st.caption("Warning: Use only for erroneous / wrong entries. All records of this employee will be permanently purged.")
-                        st.warning("⚠️ This action will completely erase this employee record from the database!")
-                        with st.form("hard_delete_form"):
-                            confirm_chk = st.checkbox("I confirm that I want to permanently delete this employee record.")
-                            if st.form_submit_button("Confirm Permanent Delete"):
-                                if not confirm_chk:
-                                    st.error("Please tick the confirmation checkbox to delete!")
-                                else:
-                                    supabase.table("employees").delete().eq("id", target_id).execute()
-                                    st.cache_data.clear()
-                                    st.toast("🗑️ Employee record permanently purged!")
-                                    st.warning("Employee permanently deleted!")
-                                    pytime.sleep(1)
-                                    st.rerun()
-                else:
-                    st.info("No employee records found.")
-
-            with tab_vault:
-                st.write("##### Complete 6-Documents Vault (Upload + Preview / Download with Max 2MB)")
-                if all_emps:
-                    emp_lookup = {f"[{emp.get('employee_code', 'TEMP')}] {emp.get('full_name')}": emp for emp in all_emps}
-                    sel_v_emp = st.selectbox("Select Employee for Documents Vault *", list(emp_lookup.keys()))
-                    v_emp = emp_lookup[sel_v_emp]
-                    v_id = v_emp["id"]
-
-                    v_ent_obj = next((e for e in ent_list if e["id"] == v_emp.get("entity_id")), None)
-                    v_cli_name = next((c["name"] for c in cli_list if c["id"] == v_emp.get("client_id")), "Client Site")
-                    v_sal_rule = get_exact_salary_rule(v_emp.get("entity_id"), v_emp.get("client_id"), v_emp.get("designation"), v_emp.get("category"))
-
-                    st.markdown("#### 1. Official Letters & Certificates")
-                    v1, v2 = st.columns(2)
-                    with v1:
-                        st.markdown("##### 1. Official Offer Letter")
-                        offer_pdf = generate_official_offer_letter(v_emp, v_ent_obj, v_cli_name, v_sal_rule)
-                        st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_off_{v_id}")
-                        
-                        up_custom_offer = st.file_uploader("Upload Signed Custom Offer Letter (Max 2MB)", type=["pdf", "jpg", "png"], key=f"up_custom_off_{v_id}")
-                        if st.button("Save Custom Offer Letter", key=f"btn_cust_off_{v_id}"):
-                            if up_custom_offer and upload_employee_doc(up_custom_offer, v_id, "offer"):
-                                st.success("Custom Offer Letter uploaded!")
-                                st.rerun()
-
-                    with v2:
-                        st.markdown("##### 2. ESIC Certificate / Card")
-                        st.download_button("Download ESIC Certificate (PDF)", data=b"ESIC Certificate Document", file_name=f"ESIC_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_esic_{v_id}")
-                        
-                        up_esic_doc = st.file_uploader("Upload Manual ESIC Card / Document (Max 2MB)", type=["pdf", "jpg", "png"], key=f"up_esic_doc_{v_id}")
-                        if st.button("Save ESIC Document", key=f"btn_esic_doc_{v_id}"):
-                            if up_esic_doc and upload_employee_doc(up_esic_doc, v_id, "esic"):
-                                st.success("ESIC Document uploaded!")
-                                st.rerun()
-
-                    st.write("---")
-                    st.markdown("#### 2. Statutory Identification & Bank Proofs")
-                    d_c1, d_c2 = st.columns(2)
-                    with d_c1:
-                        st.markdown("##### 3. Passport Size Photo")
-                        if v_emp.get("photo_file"): st.markdown(f"📷 [View Current Photo]({v_emp['photo_file']})")
-                        up_ph = st.file_uploader("Upload New Photo (Max 2MB)", type=["jpg", "png"], key=f"v_ph_{v_id}")
-                        if st.button("Save Photo", key=f"btn_ph_{v_id}"):
-                            if up_ph and upload_employee_doc(up_ph, v_id, "photo"):
-                                st.success("Photo uploaded!")
-                                st.rerun()
-
-                    with d_c2:
-                        st.markdown("##### 4. Aadhaar Card Copy")
-                        if v_emp.get("aadhar_file"): st.markdown(f"📄 [View Current Aadhaar]({v_emp['aadhar_file']})")
-                        up_adh = st.file_uploader("Upload New Aadhaar Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_adh_{v_id}")
-                        if st.button("Save Aadhaar Copy", key=f"btn_adh_{v_id}"):
-                            if up_adh and upload_employee_doc(up_adh, v_id, "aadhar"):
-                                st.success("Aadhaar Card uploaded!")
-                                st.rerun()
-
-                    d_c3, d_c4 = st.columns(2)
-                    with d_c3:
-                        st.markdown("##### 5. PAN Card Copy")
-                        if v_emp.get("pan_file"): st.markdown(f"📄 [View Current PAN]({v_emp['pan_file']})")
-                        up_pn = st.file_uploader("Upload New PAN Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_pn_{v_id}")
-                        if st.button("Save PAN Copy", key=f"btn_pn_{v_id}"):
-                            if up_pn and upload_employee_doc(up_pn, v_id, "pan"):
-                                st.success("PAN Card uploaded!")
-                                st.rerun()
-
-                    with d_c4:
-                        st.markdown("##### 6. Bank Passbook / Cheque")
-                        if v_emp.get("bank_file"): st.markdown(f"📄 [View Current Bank Proof]({v_emp['bank_file']})")
-                        up_bk = st.file_uploader("Upload New Bank Proof (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_bk_{v_id}")
-                        if st.button("Save Bank Proof", key=f"btn_bk_{v_id}"):
-                            if up_bk and upload_employee_doc(up_bk, v_id, "bank"):
-                                st.success("Bank Document uploaded!")
-                                st.rerun()
-                else:
-                    st.info("No employee records found.")
-
-            with tab_exit_emp:
-                st.write("##### Employee Exit & Deletion Management")
-                if all_emps:
-                    emp_del_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (Status: {e.get('status')})": e for e in all_emps}
-                    sel_del_label = st.selectbox("Select Employee for Exit or Deletion *", list(emp_del_map.keys()))
+                    sel_del_label = st.selectbox("Select Employee for Exit or Deletion *", list(emp_del_map.keys()), key="exit_emp_select_box")
                     target_emp = emp_del_map[sel_del_label]
                     target_id = target_emp["id"]
 
@@ -3905,59 +3778,6 @@ else:
                         p_out = att.get("punch_out") or "-"
                         ot = att.get("ot_hours", 0.0)
                         
-                        if status == "WO":
-                            status_color = "#6B7280"
-                            status_text = "⚪ WO"
-                        elif status == "PH":
-                            status_color = "#D97706"
-                            status_text = "🟠 PH"
-                        elif status in ["L", "CL", "SL", "EL", "LWP"]:
-                            status_color = "#7C3AED"
-                            status_text = f"🟣 {status}"
-                        elif status in ["P", "HD"]:
-                            status_color = "#059669"
-                            status_text = f"🟢 {status}"
-                        else:
-                            status_color = "#DC2626"
-                            status_text = f"🔴 {status}"
-
-                        st.markdown(f"""
-                        <div style="padding: 10px 14px; border-radius: 6px; border: 1px solid #E5E7EB; margin-bottom: 6px; background-color: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.01);">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 14px; font-weight: 600; color: #1F2937;">📅 {att_date}</span>
-                                <span style="background-color: {status_color}15; color: {status_color}; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700;">{status_text}</span>
-                                <span style="font-size: 12px; color: #2563EB; font-weight: 600;">OT: {ot} Hrs</span>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.info(f"No records found for the year {sel_year_val}.")
-
-            with t_att_year:
-                st.write("##### Selected Year Attendance History")
-                sel_year_val = st.number_input("Enter Year", min_value=2024, max_value=2030, value=curr_yr, step=1)
-                
-                year_prefix = f"{sel_year_val}"
-                year_atts = supabase.table("attendance").select("*").eq("employee_id", emp_id).like("date", f"{year_prefix}%").order("date", desc=True).execute().data or []
-                
-                if year_atts:
-                    tot_days_present = len([y for y in year_atts if y.get("status") in ["P", "WO", "PH", "HD"]])
-                    tot_ot_hrs = sum([float(y.get("ot_hours") or 0.0) for y in year_atts])
-                    
-                    yc1, yc2 = st.columns(2)
-                    yc1.metric(f"Total Working/Paid Days ({sel_year_val})", f"{tot_days_present} Days")
-                    yc2.metric(f"Total Accumulated OT ({sel_year_val})", f"{tot_ot_hrs:.1f} Hours")
-                    
-                    st.markdown("---")
-                    
-                    for att in year_atts:
-                        att_date = att.get("date", "-")
-                        status = att.get("status", "P")
-                        p_in = att.get("punch_in") or "-"
-                        p_out = att.get("punch_out") or "-"
-                        ot = att.get("ot_hours", 0.0)
-                        
-                        # Status-wise custom colors for year view
                         if status == "WO":
                             status_color = "#6B7280"
                             status_text = "⚪ WO"
