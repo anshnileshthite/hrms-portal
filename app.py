@@ -977,6 +977,7 @@ else:
             c_rev_map = {c["id"]: c["name"] for c in cli_list}
 
             if cands:
+                # 👇 Yethe dropdown sathi candidate map tayar kela ahe
                 cand_map = {f"{c['full_name']} (Mobile: {c['phone_number']} | Applied: {str(c.get('created_at'))[:10]})": c for c in cands}
                 sel_c_label = st.selectbox("Select Candidate to Review *", list(cand_map.keys()))
                 cand = cand_map[sel_c_label]
