@@ -380,7 +380,7 @@ I hereby accept the above offer and agree to join <b>""" + entity_name + """</b>
 Employee Name: <b>""" + str(emp_data.get('full_name')) + """</b><br/><br/>
 Signature: ___________________________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ___________________
 """
-# 👈 स्टॅम्प आणि सही जोडण्यासाठी हा कोड टाका
+# 👈 सही आणि स्टॅम्पचा ब्लॉक असा जोडा
     stamp_f, sig_f = get_entity_assets(code_pref)
     sign_elements = [Paragraph(f"<b>For {entity_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
     if stamp_f and sig_f:
@@ -397,10 +397,14 @@ Signature: ___________________________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp
 
     sign_elements.append(Paragraph("<b>Authorized Signatory</b>", ParagraphStyle(name="SignBottom", alignment=1)))
 
-    story.append(Paragraph(p2_text, styles["Normal"]))
-    doc.build(story, onFirstPage=draw_fixed_footer, onLaterPages=draw_fixed_footer)
-    buffer.seek(0)
-    return buffer.getvalue()
+    # मजकूर आणि सही-स्टॅम्प एकाच टेबलमध्ये बाजूबाजूला ठेवणे
+    p2_table = Table([[Paragraph(p2_text, styles["Normal"]), sign_elements]], colWidths=[360, 202])
+    p2_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(p2_table)
 
 def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
     buffer = io.BytesIO()
