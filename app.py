@@ -2220,8 +2220,16 @@ else:
 
                     pf_ded = 1800.0 if basic_plus_da > 15000 else round(basic_plus_da * 0.12, 2)
                     esic_ded = round(gross_amount * 0.0075, 2)
-                    mlwf_ee = 0.0                    
+                    mlwf_ee = 0.0
+                    
+                    emp_gender = str(emp_item.get("gender", "")).strip().capitalize()
+                    pt_ded = 0.0 if emp_gender == "Female" else (float(sal_struct.get("pt_amount", 200.0) if sal_struct else 200.0) if gross_amount > 10000 else 0.0)
+                    
                     adv_val = 0.0
+                    ppe_ded = 0.0
+
+                    # 👇 इथे सर्व व्हेरिएबल्स सुरक्षितपणे ॲड केले आहेत
+                    total_deduction = round(pf_ded + esic_ded + mlwf_ee + pt_ded + adv_val + ppe_ded, 2)
                     try:
                         adv_recs = supabase.table("advance_salaries").select("amount").eq("employee_id", emp_item["id"]).eq("status", "APPROVED").execute().data or []
                         adv_val = sum([float(a.get("amount") or 0.0) for a in adv_recs])
