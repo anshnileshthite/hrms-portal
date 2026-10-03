@@ -1241,12 +1241,15 @@ else:
                                 st.rerun()
 
             with tab_edit_emp:
+                all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if all_emps:
                     emp_opt_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (ID: {e['id'][:6]})": e for e in all_emps}
-                    sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()))
+                    sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()), key="edit_emp_select_box")
+                    
+                    # सुरक्षितपणे fetch करणे
                     curr_emp = emp_opt_map.get(sel_emp_to_edit)
 
-                    # 👇 हा सेफ्टी चेक AttributeError १००% रोखेल आणि एरर येऊ देणार नाही
+                    # 👇 हा सेफ्टी चेक AttributeError १००% रोखेल
                     if not curr_emp:
                         st.info("Krupaya eka valid employee la select kara.")
                         st.stop()
