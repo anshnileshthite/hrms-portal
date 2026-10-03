@@ -731,8 +731,11 @@ if not st.session_state.user:
             col_left, col_right = st.columns(2)
             c_name = col_left.text_input("Candidate Full Name *", value=st.session_state.c_name_val)
             c_father = col_left.text_input("Father's Name *", value=st.session_state.c_father_val)
-            c_dob_str = col_left.text_input("Date of Birth (DOB) *", placeholder="DD/MM/YYYY")
             c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
+            
+            # 👈 तुम्ही मागितलेला टेक्स्ट बॉक्स फॉरमॅट
+            c_dob_str = col_left.text_input("Date of Birth (DOB) *", placeholder="DD/MM/YYYY")
+            
             c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
             c_phone = col_left.text_input("Employee Mobile Number * (10 Digits)", value=st.session_state.c_phone_val)
             c_emergency = col_left.text_input("Emergency Contact Number *", value=st.session_state.c_emg_val)
@@ -785,6 +788,15 @@ if not st.session_state.user:
                         size_error = True
                         break
 
+                # DOB string format validation & conversion (DD/MM/YYYY -> YYYY-MM-DD)
+                final_dob_db = str(date.today()) # Fallback
+                dob_valid = True
+                
+                try:
+                    parsed_dob = datetime.strptime(c_dob_str.strip(), "%d/%m/%Y")
+                    final_dob_db = parsed_dob.strftime("%Y-%m-%d")
+                except Exception:
+                    dob_valid = False
                 if not size_error:
                     if not c_name or not clean_phone or not c_address:
                         st.error("Full Name, Mobile Number and Address are mandatory!")
@@ -796,7 +808,7 @@ if not st.session_state.user:
                         new_candidate = {
                             "user_id": f"TEMP_{clean_phone}", "password": "emp" + clean_phone[-4:],
                             "full_name": c_name.strip(), "father_name": c_father.strip(), "gender": c_gender,
-                            "dob": str(c_dob), "marital_status": c_marital, "phone_number": clean_phone,
+                            "dob": final_dob_db, "marital_status": c_marital, "phone_number": clean_phone,
                             "emergency_contact": c_emergency.strip(), "permanent_address": c_address.strip(),
                             "uan_number": clean_uan, "esic_number": clean_esic, "bank_name": c_bank.strip(),
                             "bank_branch": c_branch.strip(), "bank_account_no": c_acc.strip(), "ifsc_code": clean_ifsc,
@@ -3646,13 +3658,11 @@ else:
                 sel_m_picker = st.date_input("Select Month (Any date in month)", value=date.today(), key="emp_m_att_picker")
                 yr_m, mo_m = sel_m_picker.year, sel_m_picker.month
                 
-                # महिना सुरू होण्याची आणि संपण्याची तारीख काढणे
                 import calendar
                 last_day = calendar.monthrange(yr_m, mo_m)[1]
                 start_date_str = f"{yr_m}-{mo_m:02d}-01"
                 end_date_str = f"{yr_m}-{mo_m:02d}-{last_day}"
                 
-                # Like ऐवजी gte (greater than equal) आणि lte (less than equal) वापरणे
                 month_atts = []
                 try:
                     res_m = supabase.table("attendance").select("*").eq("employee_id", emp_id).gte("date", start_date_str).lte("date", end_date_str).order("date", desc=True).execute()
@@ -3661,8 +3671,7 @@ else:
                     month_atts = []
                 
                 if month_atts:
-                    # Metrics Summary
-                    tot_pres = sum(1 for a in month_atts if a.get("status") in ["P", "WO", "PH"])
+                    tot_pres = sum(1 for a in month_atts if a.get("status") in ["P", "WO", "PH", "HD"])
                     tot_ot_mo = sum(float(a.get("ot_hours", 0.0) or 0.0) for a in month_atts)
                     
                     mc1, mc2 = st.columns(2)
@@ -3671,7 +3680,6 @@ else:
                     
                     st.markdown("---")
 
-                    # Color-Coded Card Layout for each day
                     for att in month_atts:
                         att_date = att.get("date", "-")
                         status = att.get("status", "P")
@@ -3679,7 +3687,6 @@ else:
                         p_out = att.get("punch_out") or "Active / Working"
                         ot = att.get("ot_hours", 0.0)
 
-                        # Status-wise custom colors & labels
                         if status == "WO":
                             status_color = "#6B7280"  # Grey
                             status_text = "⚪ Week Off (WO)"
@@ -3711,6 +3718,65 @@ else:
                         """, unsafe_allow_html=True)
                 else:
                     st.info(f"No attendance records found for {sel_m_picker.strftime('%B %Y')}.")
+
+            with t_att_year:
+                st.write("##### Selected Year Attendance History")
+                sel_year_val = st.number_input("Enter Year", min_value=2024, max_value=2030, value=curr_yr, step=1, key="emp_yr_input")
+                
+                year_start_str = f"{int(sel_year_val)}-01-01"
+                year_end_str = f"{int(sel_year_val)}-12-31"
+                
+                year_atts = []
+                try:
+                    res_y = supabase.table("attendance").select("*").eq("employee_id", emp_id).gte("date", year_start_str).lte("date", year_end_str).order("date", desc=True).execute()
+                    year_atts = res_y.data or []
+                except Exception:
+                    year_atts = []
+                
+                if year_atts:
+                    tot_days_present = len([y for y in year_atts if y.get("status") in ["P", "WO", "PH", "HD"]])
+                    tot_ot_hrs = sum([float(y.get("ot_hours") or 0.0) for y in year_atts])
+                    
+                    yc1, yc2 = st.columns(2)
+                    yc1.metric(f"Total Working/Paid Days ({sel_year_val})", f"{tot_days_present} Days")
+                    yc2.metric(f"Total Accumulated OT ({sel_year_val})", f"{tot_ot_hrs:.1f} Hours")
+                    
+                    st.markdown("---")
+                    
+                    for att in year_atts:
+                        att_date = att.get("date", "-")
+                        status = att.get("status", "P")
+                        p_in = att.get("punch_in") or "-"
+                        p_out = att.get("punch_out") or "-"
+                        ot = att.get("ot_hours", 0.0)
+                        
+                        if status == "WO":
+                            status_color = "#6B7280"
+                            status_text = "⚪ WO"
+                        elif status == "PH":
+                            status_color = "#D97706"
+                            status_text = "🟠 PH"
+                        elif status in ["L", "CL", "SL", "EL", "LWP"]:
+                            status_color = "#7C3AED"
+                            status_text = f"🟣 {status}"
+                        elif status in ["P", "HD"]:
+                            status_color = "#059669"
+                            status_text = f"🟢 {status}"
+                        else:
+                            status_color = "#DC2626"
+                            status_text = f"🔴 {status}"
+
+                        st.markdown(f"""
+                        <div style="padding: 10px 14px; border-radius: 6px; border: 1px solid #E5E7EB; margin-bottom: 6px; background-color: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.01);">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 14px; font-weight: 600; color: #1F2937;">📅 {att_date}</span>
+                                <span style="background-color: {status_color}15; color: {status_color}; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700;">{status_text}</span>
+                                <span style="font-size: 12px; color: #2563EB; font-weight: 600;">OT: {ot} Hrs</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info(f"No records found for the year {sel_year_val}.")
 
             with t_att_year:
                 st.write("##### Selected Year Attendance History")
