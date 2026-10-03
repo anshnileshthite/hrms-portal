@@ -1154,6 +1154,8 @@ else:
             c_map = {c["name"]: c["id"] for c in cli_list}
             e_rev_map = {e["id"]: e["name"] for e in ent_list}
             c_rev_map = {c["id"]: c["name"] for c in cli_list}
+            
+            # सुरक्षितपणे सर्व employees फेच करणे
             all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
 
             with tab_add_emp:
@@ -1241,15 +1243,13 @@ else:
                                 st.rerun()
 
             with tab_edit_emp:
-                all_emps = supabase.table("employees").select("*").eq("role", "employee").execute().data or []
                 if all_emps:
                     emp_opt_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (ID: {e['id'][:6]})": e for e in all_emps}
                     sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()), key="edit_emp_select_box")
                     
-                    # सुरक्षितपणे fetch करणे
                     curr_emp = emp_opt_map.get(sel_emp_to_edit)
 
-                    # 👇 हा सेफ्टी चेक AttributeError १००% रोखेल
+                    # 👈 हा सेफ्टी चेक AttributeError १००% रोखेल
                     if not curr_emp:
                         st.info("Krupaya eka valid employee la select kara.")
                         st.stop()
@@ -1357,6 +1357,137 @@ else:
                             st.success("All details updated!")
                             pytime.sleep(1)
                             st.rerun()
+                else:
+                    st.info("No employee records found.")
+
+            with tab_vault:
+                st.write("##### Complete 6-Documents Vault (Upload + Preview / Download with Max 2MB)")
+                if all_emps:
+                    emp_lookup = {f"[{emp.get('employee_code', 'TEMP')}] {emp.get('full_name')}": emp for emp in all_emps}
+                    sel_v_emp = st.selectbox("Select Employee for Documents Vault *", list(emp_lookup.keys()))
+                    v_emp = emp_lookup[sel_v_emp]
+                    v_id = v_emp["id"]
+
+                    v_ent_obj = next((e for e in ent_list if e["id"] == v_emp.get("entity_id")), None)
+                    v_cli_name = next((c["name"] for c in cli_list if c["id"] == v_emp.get("client_id")), "Client Site")
+                    v_sal_rule = get_exact_salary_rule(v_emp.get("entity_id"), v_emp.get("client_id"), v_emp.get("designation"), v_emp.get("category"))
+
+                    st.markdown("#### 1. Official Letters & Certificates")
+                    v1, v2 = st.columns(2)
+                    with v1:
+                        st.markdown("##### 1. Official Offer Letter")
+                        offer_pdf = generate_official_offer_letter(v_emp, v_ent_obj, v_cli_name, v_sal_rule)
+                        st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_off_{v_id}")
+                        
+                        up_custom_offer = st.file_uploader("Upload Signed Custom Offer Letter (Max 2MB)", type=["pdf", "jpg", "png"], key=f"up_custom_off_{v_id}")
+                        if st.button("Save Custom Offer Letter", key=f"btn_cust_off_{v_id}"):
+                            if up_custom_offer and upload_employee_doc(up_custom_offer, v_id, "offer"):
+                                st.success("Custom Offer Letter uploaded!")
+                                st.rerun()
+
+                    with v2:
+                        st.markdown("##### 2. ESIC Certificate / Card")
+                        st.download_button("Download ESIC Certificate (PDF)", data=b"ESIC Certificate Document", file_name=f"ESIC_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_esic_{v_id}")
+                        
+                        up_esic_doc = st.file_uploader("Upload Manual ESIC Card / Document (Max 2MB)", type=["pdf", "jpg", "png"], key=f"up_esic_doc_{v_id}")
+                        if st.button("Save ESIC Document", key=f"btn_esic_doc_{v_id}"):
+                            if up_esic_doc and upload_employee_doc(up_esic_doc, v_id, "esic"):
+                                st.success("ESIC Document uploaded!")
+                                st.rerun()
+
+                    st.write("---")
+                    st.markdown("#### 2. Statutory Identification & Bank Proofs")
+                    d_c1, d_c2 = st.columns(2)
+                    with d_c1:
+                        st.markdown("##### 3. Passport Size Photo")
+                        if v_emp.get("photo_file"): st.markdown(f"📷 [View Current Photo]({v_emp['photo_file']})")
+                        up_ph = st.file_uploader("Upload New Photo (Max 2MB)", type=["jpg", "png"], key=f"v_ph_{v_id}")
+                        if st.button("Save Photo", key=f"btn_ph_{v_id}"):
+                            if up_ph and upload_employee_doc(up_ph, v_id, "photo"):
+                                st.success("Photo uploaded!")
+                                st.rerun()
+
+                    with d_c2:
+                        st.markdown("##### 4. Aadhaar Card Copy")
+                        if v_emp.get("aadhar_file"): st.markdown(f"📄 [View Current Aadhaar]({v_emp['aadhar_file']})")
+                        up_adh = st.file_uploader("Upload New Aadhaar Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_adh_{v_id}")
+                        if st.button("Save Aadhaar Copy", key=f"btn_adh_{v_id}"):
+                            if up_adh and upload_employee_doc(up_adh, v_id, "aadhar"):
+                                st.success("Aadhaar Card uploaded!")
+                                st.rerun()
+
+                    d_c3, d_c4 = st.columns(2)
+                    with d_c3:
+                        st.markdown("##### 5. PAN Card Copy")
+                        if v_emp.get("pan_file"): st.markdown(f"📄 [View Current PAN]({v_emp['pan_file']})")
+                        up_pn = st.file_uploader("Upload New PAN Copy (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_pn_{v_id}")
+                        if st.button("Save PAN Copy", key=f"btn_pn_{v_id}"):
+                            if up_pn and upload_employee_doc(up_pn, v_id, "pan"):
+                                st.success("PAN Card uploaded!")
+                                st.rerun()
+
+                    with d_c4:
+                        st.markdown("##### 6. Bank Passbook / Cheque")
+                        if v_emp.get("bank_file"): st.markdown(f"📄 [View Current Bank Proof]({v_emp['bank_file']})")
+                        up_bk = st.file_uploader("Upload New Bank Proof (Max 2MB)", type=["pdf", "jpg", "png"], key=f"v_bk_{v_id}")
+                        if st.button("Save Bank Proof", key=f"btn_bk_{v_id}"):
+                            if up_bk and upload_employee_doc(up_bk, v_id, "bank"):
+                                st.success("Bank Document uploaded!")
+                                st.rerun()
+                else:
+                    st.info("No employee records found.")
+
+            with tab_exit_emp:
+                st.write("##### Employee Exit & Deletion Management")
+                if all_emps:
+                    emp_del_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (Status: {e.get('status')})": e for e in all_emps}
+                    sel_del_label = st.selectbox("Select Employee for Exit or Deletion *", list(emp_del_map.keys()))
+                    target_emp = emp_del_map[sel_del_label]
+                    target_id = target_emp["id"]
+
+                    st.markdown(f"""
+                    <div style="background-color:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:6px; margin-bottom:15px;">
+                        <b>Employee:</b> {target_emp.get('full_name')} | <b>Code:</b> {target_emp.get('employee_code')}<br/>
+                        <b>Entity:</b> {e_rev_map.get(target_emp.get('entity_id'), 'N/A')} | <b>Client Site:</b> {c_rev_map.get(target_emp.get('client_id'), 'N/A')}<br/>
+                        <b>Current Status:</b> <span style="font-weight:bold; color:#0284C7;">{target_emp.get('status')}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    exit_col, del_col = st.columns(2)
+                    with exit_col:
+                        st.markdown("#### Option A: Mark as LEFT / RESIGNED")
+                        st.caption("Recommended: Employee access is deactivated, but past payroll, attendance and statutory records are permanently preserved.")
+                        with st.form("mark_left_form"):
+                            ex_date = st.date_input("Exit Date / Last Working Day *", value=date.today())
+                            ex_reason = st.selectbox("Reason for Leaving *", ["Resigned", "Absconding", "Terminated", "Medical Grounds", "Contract End", "Other"])
+                            ex_remarks = st.text_area("Exit Remarks")
+                            if st.form_submit_button("Mark Employee as LEFT", type="primary"):
+                                supabase.table("employees").update({
+                                    "status": "LEFT",
+                                    "admin_remarks": f"LEFT on {ex_date} | Reason: {ex_reason} | Remarks: {ex_remarks}"
+                                }).eq("id", target_id).execute()
+                                st.cache_data.clear()
+                                st.toast("✅ Employee marked as LEFT!")
+                                st.success(f"{target_emp.get('full_name')} marked as LEFT. Login access disabled; records safely retained.")
+                                pytime.sleep(1)
+                                st.rerun()
+
+                    with del_col:
+                        st.markdown("#### Option B: Permanent Hard Delete")
+                        st.caption("Warning: Use only for erroneous / wrong entries. All records of this employee will be permanently purged.")
+                        st.warning("⚠️ This action will completely erase this employee record from the database!")
+                        with st.form("hard_delete_form"):
+                            confirm_chk = st.checkbox("I confirm that I want to permanently delete this employee record.")
+                            if st.form_submit_button("Confirm Permanent Delete"):
+                                if not confirm_chk:
+                                    st.error("Please tick the confirmation checkbox to delete!")
+                                else:
+                                    supabase.table("employees").delete().eq("id", target_id).execute()
+                                    st.cache_data.clear()
+                                    st.toast("🗑️ Employee record permanently purged!")
+                                    st.warning("Employee permanently deleted!")
+                                    pytime.sleep(1)
+                                    st.rerun()
                 else:
                     st.info("No employee records found.")
 
