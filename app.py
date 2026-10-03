@@ -7,6 +7,13 @@ import math
 import re
 import time as pytime
 from datetime import date, datetime, time, timedelta
+# Onboarding form madhe date_input vapratana he range taka:
+dob = st.date_input(
+    "Date of Birth (DOB) *",
+    value=date(1995, 1, 1),
+    min_value=date(1940, 1, 1),
+    max_value=date.today()
+)
 from database import supabase
 
 # ReportLab Libraries for PDF Generation
@@ -3536,51 +3543,54 @@ else:
                 is_offline_mode = st.checkbox("Simulate No Network (Offline Punch Mode)", value=False)
 
                 if st.form_submit_button("Thumb / Geo Punch Now", type="primary"):
-                    current_time_str = datetime.now().strftime("%H:%M:%S")
-                    geofence_passed = True
-                    dist_meters = 0.0
+                     current_time_str = datetime.now().strftime("%H:%M:%S")
+            geofence_passed = True
+            dist_meters = 0.0
 
-                    if client_record and not is_offline_mode:
-                        c_lat = float(client_record[0].get("latitude", 18.651200))
-                        c_lon = float(client_record[0].get("longitude", 73.805500))
-                        
-                        # Haversine formula for exact distance calculation in meters
-                        lat1, lon1, lat2, lon2 = map(math.radians, [user_lat, user_lon, c_lat, c_lon])
-                        dlon = lon2 - lon1
-                        dlat = lat2 - lat1
-                        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-                        c = 2 * math.asin(math.sqrt(a))
-                        r = 6371000 # Radius of earth in meters
-                        dist_meters = c * r
+            if client_record and not is_offline_mode:
+                c_lat = float(client_record[0].get("latitude", 18.651200))
+                c_lon = float(client_record[0].get("longitude", 73.805500))
+                
+                lat1, lon1, lat2, lon2 = map(math.radians, [user_lat, user_lon, c_lat, c_lon])
+                dlon = lon2 - lon1
+                dlat = lat2 - lat1
+                a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+                c = 2 * math.asin(math.sqrt(a))
+                dist_meters = c * 6371000 # Meters
 
-                        # Plant geofence radius limit (e.g., 50 meters to account for GPS accuracy variance)
-                        if dist_meters > 50.0:
-                            geofence_passed = False
+                if dist_meters > 50.0:
+                    geofence_passed = False
 
-                    if not geofence_passed:
-                        st.error(f"❌ Invalid Location: You are outside the plant geofence radius (Distance: {dist_meters:.1f}m from site). Please move inside the plant premises to punch.")
-                    elif is_offline_mode:
-                        st.warning("⚠️ Offline Mode: Punch saved locally. It will auto-sync once online.")
-                    else:
-                        if not today_att:
-                            supabase.table("attendance").upsert({
-                                "employee_id": emp_id,
-                                "date": today_date_str,
-                                "status": "P",
-                                "punch_in": current_time_str,
-                                "punch_out": None,
-                                "ot_hours": 0.0,
-                                "is_valid_geo": True
-                            }, on_conflict="employee_id,date").execute()
-                            st.toast("✅ First Punch-In Recorded Successfully!")
-                        else:
-                            supabase.table("attendance").update({
-                                "punch_out": current_time_str
-                            }).eq("id", today_att[0]["id"]).execute()
-                            st.toast("✅ Attendance Updated with Punch-Out Time!")
-                            
-                        pytime.sleep(1)
-                        st.rerun()
+            if not geofence_passed:
+                st.error(f"❌ Invalid Location: You are outside the plant geofence radius (Distance: {dist_meters:.1f}m).")
+            elif is_offline_mode:
+                st.warning("⚠️ Offline Mode: Punch saved locally.")
+            else:
+                # 1. आधी तपासा की आजची एंट्री आधीपासून आहे का
+                check_att = supabase.table("attendance").select("id, punch_in").eq("employee_id", emp_id).eq("date", today_date_str).execute().data
+
+                if not check_att:
+                    # 2. आजची पहिलीच एंट्री असेल तर INSERT करा (First Punch-In)
+                    supabase.table("attendance").insert({
+                        "employee_id": emp_id,
+                        "date": today_date_str,
+                        "status": "P",
+                        "punch_in": current_time_str,
+                        "punch_out": None,
+                        "ot_hours": 0.0,
+                        "is_valid_geo": True
+                    }).execute()
+                    st.toast("✅ First Punch-In Recorded Successfully!")
+                else:
+                    # 3. आधीच पंच-इन असेल तर फक्त PUNCH-OUT अपडेट करा (Last Punch-Out)
+                    att_id = check_att[0]["id"]
+                    supabase.table("attendance").update({
+                        "punch_out": current_time_str
+                    }).eq("id", att_id).execute()
+                    st.toast("✅ Attendance Updated with Punch-Out Time!")
+                    
+                pytime.sleep(1)
+                st.rerun()
 
         # EMPLOYEE PANEL 2: APPLY LEAVE & BALANCE
         elif selected_emp_panel == "Apply Leave & Balance":
@@ -3611,7 +3621,7 @@ else:
                         st.success("Leave request submitted successfully!")
                         st.rerun()
 
-        # EMPLOYEE PANEL 3: ATTENDANCE TRACKING
+        # EMPLOYEE PANEL 3: ATTENDANCE TRACKING & CALENDAR
         elif selected_emp_panel == "Attendance Calendar":
             st.subheader("Attendance Tracking & Time Log Dashboards")
 
@@ -3639,24 +3649,62 @@ else:
                     st.info("No punch recorded for today yet. Use 'Daily Punch (Geofenced)' panel to punch in.")
 
             with t_att_month:
-                st.write("##### Full Month Attendance Register")
+                st.write("##### Full Month Attendance Register & Color-Coded Logs")
                 sel_m_picker = st.date_input("Select Month (Any date in month)", value=date.today(), key="emp_m_att_picker")
                 yr_m, mo_m = sel_m_picker.year, sel_m_picker.month
                 
                 month_prefix = f"{yr_m}-{mo_m:02d}"
-                month_atts = supabase.table("attendance").select("*").eq("employee_id", emp_id).like("date", f"{month_prefix}%").execute().data or []
+                month_atts = supabase.table("attendance").select("*").eq("employee_id", emp_id).like("date", f"{month_prefix}%").order("date", desc=True).execute().data or []
                 
                 if month_atts:
-                    m_data = []
-                    for ma in sorted(month_atts, key=lambda x: x["date"]):
-                        m_data.append({
-                            "Date": ma.get("date"),
-                            "Status": ma.get("status"),
-                            "Punch In": ma.get("punch_in", "-"),
-                            "Punch Out": ma.get("punch_out", "-"),
-                            "OT Hours": ma.get("ot_hours", 0.0)
-                        })
-                    st.dataframe(pd.DataFrame(m_data), use_container_width=True)
+                    # Metrics Summary
+                    tot_pres = sum(1 for a in month_atts if a.get("status") in ["P", "WO", "PH"])
+                    tot_ot_mo = sum(float(a.get("ot_hours", 0.0) or 0.0) for a in month_atts)
+                    
+                    mc1, mc2 = st.columns(2)
+                    mc1.metric("Total Present / Paid Days", f"{tot_pres} Days")
+                    mc2.metric("Total OT (This Month)", f"{tot_ot_mo:.1f} Hrs")
+                    
+                    st.markdown("---")
+
+                    # Color-Coded Card Layout for each day
+                    for att in month_atts:
+                        att_date = att.get("date", "-")
+                        status = att.get("status", "P")
+                        p_in = att.get("punch_in") or "Not Punched"
+                        p_out = att.get("punch_out") or "Active / Working"
+                        ot = att.get("ot_hours", 0.0)
+
+                        # Status-wise custom colors & labels
+                        if status == "WO":
+                            status_color = "#6B7280"  # Grey
+                            status_text = "⚪ Week Off (WO)"
+                        elif status == "PH":
+                            status_color = "#D97706"  # Orange
+                            status_text = "🟠 Paid Holiday (PH)"
+                        elif status in ["L", "CL", "SL", "EL", "LWP"]:
+                            status_color = "#7C3AED"  # Purple
+                            status_text = f"🟣 Leave ({status})"
+                        elif status in ["P", "HD"]:
+                            status_color = "#059669"  # Green
+                            status_text = f"🟢 Present ({status})"
+                        else:
+                            status_color = "#DC2626"  # Red
+                            status_text = f"🔴 Absent / {status}"
+
+                        st.markdown(f"""
+                        <div style="padding: 12px; border-radius: 8px; border: 1px solid #E5E7EB; margin-bottom: 8px; background-color: #F9FAFB; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <strong style="font-size: 15px; color: #1F2937;">📅 Date: {att_date}</strong>
+                                <span style="background-color: {status_color}15; color: {status_color}; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">{status_text}</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 13px; color: #4B5563; margin-top: 8px;">
+                                <div>⏰ <b>Punch-In:</b> <span style="color: #111827;">{p_in}</span></div>
+                                <div>⏳ <b>Punch-Out:</b> <span style="color: #111827;">{p_out}</span></div>
+                                <div>⚡ <b>OT Hours:</b> <span style="color: #2563EB; font-weight: 600;">{ot} Hrs</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
                     st.info(f"No attendance records found for {sel_m_picker.strftime('%B %Y')}.")
 
@@ -3665,19 +3713,51 @@ else:
                 sel_year_val = st.number_input("Enter Year", min_value=2024, max_value=2030, value=curr_yr, step=1)
                 
                 year_prefix = f"{sel_year_val}"
-                year_atts = supabase.table("attendance").select("*").eq("employee_id", emp_id).like("date", f"{year_prefix}%").execute().data or []
+                year_atts = supabase.table("attendance").select("*").eq("employee_id", emp_id).like("date", f"{year_prefix}%").order("date", desc=True).execute().data or []
                 
                 if year_atts:
-                    tot_days_present = len([y for y in year_atts if y.get("status") in ["P", "WO", "PH"]])
+                    tot_days_present = len([y for y in year_atts if y.get("status") in ["P", "WO", "PH", "HD"]])
                     tot_ot_hrs = sum([float(y.get("ot_hours") or 0.0) for y in year_atts])
                     
                     yc1, yc2 = st.columns(2)
                     yc1.metric(f"Total Working/Paid Days ({sel_year_val})", f"{tot_days_present} Days")
                     yc2.metric(f"Total Accumulated OT ({sel_year_val})", f"{tot_ot_hrs:.1f} Hours")
                     
-                    st.write("---")
-                    y_data = [{"Date": y.get("date"), "Status": y.get("status"), "OT (Hrs)": y.get("ot_hours", 0.0)} for y in sorted(year_atts, key=lambda x: x["date"])]
-                    st.dataframe(pd.DataFrame(y_data), use_container_width=True)
+                    st.markdown("---")
+                    
+                    for att in year_atts:
+                        att_date = att.get("date", "-")
+                        status = att.get("status", "P")
+                        p_in = att.get("punch_in") or "-"
+                        p_out = att.get("punch_out") or "-"
+                        ot = att.get("ot_hours", 0.0)
+                        
+                        # Status-wise custom colors for year view
+                        if status == "WO":
+                            status_color = "#6B7280"
+                            status_text = "⚪ WO"
+                        elif status == "PH":
+                            status_color = "#D97706"
+                            status_text = "🟠 PH"
+                        elif status in ["L", "CL", "SL", "EL", "LWP"]:
+                            status_color = "#7C3AED"
+                            status_text = f"🟣 {status}"
+                        elif status in ["P", "HD"]:
+                            status_color = "#059669"
+                            status_text = f"🟢 {status}"
+                        else:
+                            status_color = "#DC2626"
+                            status_text = f"🔴 {status}"
+
+                        st.markdown(f"""
+                        <div style="padding: 10px 14px; border-radius: 6px; border: 1px solid #E5E7EB; margin-bottom: 6px; background-color: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,0.01);">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 14px; font-weight: 600; color: #1F2937;">📅 {att_date}</span>
+                                <span style="background-color: {status_color}15; color: {status_color}; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700;">{status_text}</span>
+                                <span style="font-size: 12px; color: #2563EB; font-weight: 600;">OT: {ot} Hrs</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
                     st.info(f"No records found for the year {sel_year_val}.")
 
