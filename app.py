@@ -1064,7 +1064,7 @@ else:
                     set_addr = st.text_area("Permanent Address *", value=cand.get("permanent_address", ""))
 
                     st1, st2, st3, st4 = st.columns(4)
-                    set_aadhar = st.text_input("Aadhaar Number *", value=str(curr_emp.get("aadhar_number") or ""))
+                    set_aadhar = st.text_input("Aadhaar Number *", value=str(cand.get("aadhar_number") or ""))
                     set_pan = st2.text_input("PAN Number", value=cand.get("pan_number", ""))
                     set_uan = st3.text_input("UAN Number", value=cand.get("uan_number", ""))
                     set_esic = st4.text_input("ESIC Number", value=cand.get("esic_number", ""))
