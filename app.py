@@ -153,10 +153,22 @@ def get_entity_logo(entity_name):
 
 def get_entity_assets(code_prefix):
     pref = str(code_prefix or "sagar").lower().strip()
-    stamp_path = f"{pref}_stamp.png"
-    sig_path = f"{pref}_signature.png"
-    final_stamp = stamp_path if os.path.exists(stamp_path) else ("stamp.png" if os.path.exists("stamp.png") else None)
-    final_sig = sig_path if os.path.exists(sig_path) else ("signature.png" if os.path.exists("signature.png") else None)
+    
+    # 1. Entity-wise vegevegala stamp shodhne (उदा. gm_stamp, se_stamp, un_stamp)
+    stamp_filename_1 = f"{pref}_stamp.png"
+    stamp_filename_2 = f"{pref}_Stamp.png"
+    
+    final_stamp = None
+    if os.path.exists(stamp_filename_1):
+        final_stamp = stamp_filename_1
+    elif os.path.exists(stamp_filename_2):
+        final_stamp = stamp_filename_2
+    elif os.path.exists("stamp.png"):
+        final_stamp = "stamp.png"
+
+    # 2. Signature sathi tumhi ekch thevli ahe mhanun 'signature.png' waparne
+    final_sig = "signature.png" if os.path.exists("signature.png") else None
+
     return final_stamp, final_sig
 
 def num_to_words(number):
@@ -1670,7 +1682,6 @@ else:
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
             
-            # Safe check for supervisor variables to prevent NameError in Admin portal
             _sup_ent_id = locals().get("sup_ent_id", None)
             _sup_cli_id = locals().get("sup_cli_id", None)
             _sup_id = locals().get("sup_id", None)
@@ -1698,16 +1709,11 @@ else:
             matched_c_map = {c["name"]: c["id"] for c in matched_clis}
             sel_r_cli = f_col2.selectbox("Select Client Plant Site *", list(matched_c_map.keys()) if matched_c_map else ["No Client"])
 
-            sel_scope = st.radio("Target Period Scope", ["Full Month", "Weekly Range (7 Days)", "Single Date"], horizontal=True)
+            # 👈 Full Month ऐवजी Full Week आणि Single Date options
+            sel_scope = st.radio("Target Period Scope", ["Full Week (7 Days)", "Single Date"], horizontal=True)
 
             target_dates = []
-            if sel_scope == "Full Month":
-               r_month_input = st.date_input("Select Target Month (Any date in month)", value=date.today())
-               yr = r_month_input.year
-               mo = r_month_input.month
-               days_in_m = 31 if mo in [1,3,5,7,8,10,12] else (30 if mo != 2 else (29 if yr % 4 == 0 else 28))
-               target_dates = [str(date(yr, mo, d)) for d in range(1, days_in_m + 1)]
-            elif sel_scope == "Weekly Range (7 Days)":
+            if sel_scope == "Full Week (7 Days)":
                week_start = st.date_input("Select Week Start Date (Monday / Any day)", value=date.today())
                target_dates = [str(week_start + timedelta(days=i)) for i in range(7)]
                st.caption(f"Deployment configured for week: {week_start} to {week_start + timedelta(days=6)}")
@@ -3011,18 +3017,16 @@ else:
             cli_list = fetch_cached_clients()
             if sup_ent_id:
                 cli_list = [c for c in cli_list if c.get("entity_id") == sup_ent_id]
-            if sup_cli_id:
-                # Supervisor ला नेमणूक केलेले सर्व Client IDs फेच करणे
-                assigned_client_ids = []
-                if sup_id:
-                  sup_cli_res = supabase.table("supervisor_clients").select("client_id").eq("supervisor_id", sup_id).execute().data or []
-                  assigned_client_ids = [sc["client_id"] for sc in sup_cli_res]
 
-# जर एकापेक्षा जास्त clients असतील तर त्यांची यादी फिल्टर करणे
+            assigned_client_ids = []
+            if sup_id:
+                sup_cli_res = supabase.table("supervisor_clients").select("client_id").eq("supervisor_id", sup_id).execute().data or []
+                assigned_client_ids = [sc["client_id"] for sc in sup_cli_res]
+
             if assigned_client_ids:
-              cli_list = [c for c in cli_list if c.get("id") in assigned_client_ids]
+                cli_list = [c for c in cli_list if c.get("id") in assigned_client_ids]
             elif sup_cli_id:
-              cli_list = [c for c in cli_list if c.get("id") == sup_cli_id]
+                cli_list = [c for c in cli_list if c.get("id") == sup_cli_id]
 
             c_dict = {c["name"]: c["id"] for c in cli_list}
             sel_s_cli = st.selectbox("Select Assigned Plant Site *", list(c_dict.keys()) if c_dict else ["No Client Assigned"])
@@ -3030,15 +3034,13 @@ else:
             if sel_s_cli in c_dict:
                 curr_site_cli_id = c_dict[sel_s_cli]
 
-                s_scope = st.radio("Target Period Scope", ["Full Month", "Single Date"], horizontal=True)
+                # 👈 Full Month ऐवजी Full Week आणि Single Date options
+                s_scope = st.radio("Target Period Scope", ["Full Week (7 Days)", "Single Date"], horizontal=True)
                 target_dates = []
-                if s_scope == "Full Month":
-                    r_month_input = st.date_input("Select Target Month (Any date in month)", value=date.today(), key="sup_r_month")
-                    yr = r_month_input.year
-                    mo = r_month_input.month
-                    days_in_m = 31 if mo in [1, 3, 5, 7, 8, 10, 12] else (30 if mo != 2 else (29 if yr % 4 == 0 else 28))
-                    target_dates = [str(date(yr, mo, d)) for d in range(1, days_in_m + 1)]
-                    st.caption(f"Deployment configured for: **{r_month_input.strftime('%B %Y')}** ({len(target_dates)} Days)")
+                if s_scope == "Full Week (7 Days)":
+                    week_start = st.date_input("Select Week Start Date (Monday / Any day)", value=date.today(), key="sup_r_week")
+                    target_dates = [str(week_start + timedelta(days=i)) for i in range(7)]
+                    st.caption(f"Deployment configured for week: **{week_start}** to **{week_start + timedelta(days=6)}** ({len(target_dates)} Days)")
                 else:
                     single_d = st.date_input("Select Target Date", value=date.today(), key="sup_r_date")
                     target_dates = [str(single_d)]
