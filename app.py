@@ -2580,14 +2580,16 @@ else:
                     ents_all = fetch_cached_entities()
                     if ents_all:
                         ent_select_map = {e["name"]: e for e in ents_all}
-                        sel_ent_e = st.selectbox("Select Entity to Edit/Delete", list(ent_select_map.keys()))
+                        sel_ent_e = st.selectbox("Select Entity to Edit/Delete", list(ent_select_map.keys()), key="edit_ent_sel_dropdown")
                         curr_e = ent_select_map[sel_ent_e]
                         with st.form("edit_entity_portal_form_full_admin"):
-                            en_up_name = st.text_input("Firm Name", value=curr_e.get("name", ""))
+                            en_up_name = st.text_input("Firm Name *", value=curr_e.get("name", ""))
+                            en_up_pref = st.text_input("Code Prefix (e.g. SE, GM) *", value=curr_e.get("code_prefix", ""))
                             en_up_owner = st.text_input("Owner Name", value=curr_e.get("owner_name", ""))
-                            en_up_addr = st.text_area("Full Address", value=curr_e.get("address", ""))
-                            en_up_gst = st.text_input("GST", value=curr_e.get("gst_number", ""))
-                            en_up_pan = st.text_input("PAN", value=curr_e.get("pan_number", ""))
+                            en_up_addr = st.text_area("Full Address *", value=curr_e.get("address", ""))
+                            en_up_gst = st.text_input("GST Number *", value=curr_e.get("gst_number", ""))
+                            en_up_pan = st.text_input("PAN Number", value=curr_e.get("pan_number", ""))
+                            en_up_ph = st.text_input("Phone Number", value=curr_e.get("phone", ""))
                             en_up_em = st.text_input("Email ID", value=curr_e.get("email", ""))
                             en_up_bnk = st.text_input("Bank Name", value=curr_e.get("bank_name", ""))
                             en_up_acc = st.text_input("Bank Account No", value=curr_e.get("bank_account_no", ""))
@@ -2595,19 +2597,39 @@ else:
                             
                             c1, c2 = st.columns(2)
                             if c1.form_submit_button("Update Entity", type="primary"):
-                                supabase.table("entities").update({
-                                    "name": en_up_name, "owner_name": en_up_owner, "address": en_up_addr,
-                                    "gst_number": en_up_gst, "pan_number": en_up_pan, "email": en_up_em,
-                                    "bank_name": en_up_bnk, "bank_account_no": en_up_acc, "ifsc_code": en_up_ifsc
-                                }).eq("id", curr_e["id"]).execute()
-                                st.cache_data.clear()
-                                st.success("Entity updated!")
-                                st.rerun()
+                                try:
+                                    supabase.table("entities").update({
+                                        "name": en_up_name, 
+                                        "code_prefix": en_up_pref, 
+                                        "owner_name": en_up_owner, 
+                                        "address": en_up_addr,
+                                        "gst_number": en_up_gst, 
+                                        "pan_number": en_up_pan, 
+                                        "phone": en_up_ph, 
+                                        "email": en_up_em,
+                                        "bank_name": en_up_bnk, 
+                                        "bank_account_no": en_up_acc, 
+                                        "ifsc_code": en_up_ifsc
+                                    }).eq("id", curr_e["id"]).execute()
+                                    
+                                    st.cache_data.clear()
+                                    st.toast("✅ Entity updated successfully!")
+                                    st.success("Entity updated!")
+                                    pytime.sleep(1)
+                                    st.rerun()
+                                except Exception as err:
+                                    st.error(f"Error updating entity: {err}")
+
                             if c2.form_submit_button("Delete Entity"):
-                                supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
-                                st.cache_data.clear()
-                                st.warning("Entity deleted!")
-                                st.rerun()
+                                try:
+                                    supabase.table("entities").delete().eq("id", curr_e["id"]).execute()
+                                    st.cache_data.clear()
+                                    st.toast("🗑️ Entity deleted successfully!")
+                                    st.warning("Entity deleted!")
+                                    pytime.sleep(1)
+                                    st.rerun()
+                                except Exception as err:
+                                    st.error(f"Error deleting entity: {err}")
 
             with loc2:
                 st.subheader("2. Client Plant Master & Geofence")
