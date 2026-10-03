@@ -732,7 +732,7 @@ if not st.session_state.user:
             c_name = col_left.text_input("Candidate Full Name *", value=st.session_state.c_name_val)
             c_father = col_left.text_input("Father's Name *", value=st.session_state.c_father_val)
             c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
-            c_dob = col_left.date_input("Date of Birth (DOB) *", min_value=date(1940, 1, 1), max_value=date(2026, 12, 1), value=date(1998, 1, 1), format="DD/MM/YYYY")
+            c_dob = col_left.date_input("Date of Birth (DOB) *",min_value=date(1940, 1, 1),max_value=date.today(),value=date(1998, 1, 1),format="DD/MM/YYYY")
             c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
             c_phone = col_left.text_input("Employee Mobile Number * (10 Digits)", value=st.session_state.c_phone_val)
             c_emergency = col_left.text_input("Emergency Contact Number *", value=st.session_state.c_emg_val)
