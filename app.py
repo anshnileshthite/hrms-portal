@@ -153,27 +153,18 @@ def get_entity_logo(entity_name):
 
 def get_entity_assets(code_prefix):
     pref = str(code_prefix or "sagar").lower().strip()
-    
-    # 1. सिस्टीम आपोआप स्मॉल लेटरमधील स्टॅम्प फाईल शोधेल (उदा. gm_stamp.png, abc_stamp.png)
     specific_stamp = f"{pref}_stamp.png"
-    
     final_stamp = None
     if os.path.exists(specific_stamp):
         final_stamp = specific_stamp
     else:
-        # 2. भविष्यात नवीन एंटिटी ॲड केल्यावर फोल्डरमध्ये त्यांच्या नावाचा स्टॅम्प शोधण्यासाठी ऑटोमॅटिक लूप
         for file in os.listdir("."):
             if file.lower().startswith(pref) and "stamp" in file.lower() and file.endswith((".png", ".jpg", ".jpeg")):
                 final_stamp = file
                 break
-                
-    # 3. कोणतीही विशिष्ट फाईल न मिळाल्यास डिफॉल्ट स्टॅम्प वापरणे
     if not final_stamp and os.path.exists("stamp.png"):
         final_stamp = "stamp.png"
-
-    # 4. सर्व एंटिटीजसाठी कॉमन सही (Signature)
     final_sig = "signature.png" if os.path.exists("signature.png") else None
-
     return final_stamp, final_sig
 
 def num_to_words(number):
@@ -205,26 +196,22 @@ def get_exact_salary_rule(entity_id, client_id, designation, category):
                 "basic": 14010.0, "da": 2511.0, "hra": 826.0, "other_allowance": 813.0, "pt_amount": 200.0
             }
         
-        # 1. Flexible Wildcard Match: Entity + Client + Designation
         if designation:
             desig_query = f"%{str(designation).strip().split('(')[0].strip()}%"
             res = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).ilike("designation", desig_query).execute().data
             if res:
                 return res[0]
         
-        # 2. Fallback Match: Fakt Entity ani Client varun rule
         res_client = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).execute().data
         if res_client:
             return res_client[0]
             
-        # 3. Last Fallback: Fakt Entity varun
         res_ent = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).execute().data
         if res_ent:
             return res_ent[0]
     except Exception:
         pass
         
-    # 4. Safe Default Fallback (Code kadhich crash honar nahi)
     return {
         "basic": 14010.0,
         "da": 2511.0,
@@ -264,12 +251,19 @@ def update_leave_accrual(emp_id):
                     }).eq("id", b_rec["id"]).execute()
     except Exception: pass
 
+# =============================================================================
+# PDF GENERATOR: OFFER LETTER (Safe Fallback + Stamp & Signature)
+# =============================================================================
 def generate_official_offer_letter(emp_data, entity_obj, client_name="Authorized Client Site", sal_rule=None):
     if not sal_rule:
         sal_rule = {
-            "basic": 14010.0, "da": 2511.0, "hra": 826.0, "other_allowance": 813.0, "pt_amount": 200.0
+            "basic": 14010.0,
+            "da": 2511.0,
+            "hra": 826.0,
+            "other_allowance": 813.0,
+            "pt_amount": 200.0
         }
-    
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=60)
     styles = getSampleStyleSheet()
@@ -337,14 +331,17 @@ The details of your salary bifurcation are as below -"""
     story.append(Paragraph(body1, styles["Normal"]))
     story.append(Spacer(1, 10))
 
-    basic = float(sal_rule.get("basic", 14010.0)) if sal_rule else 14010.0
-    da = float(sal_rule.get("da", 2511.0)) if sal_rule else 2511.0
-    hra = float(sal_rule.get("hra", 826.0)) if sal_rule else 826.0
-    other = float(sal_rule.get("other_allowance", 813.0)) if sal_rule else 813.0
+    basic = float(sal_rule.get("basic", 14010.0))
+    da = float(sal_rule.get("da", 2511.0))
+    hra = float(sal_rule.get("hra", 826.0))
+    other = float(sal_rule.get("other_allowance", 813.0))
     gross = basic + da + hra + other
 
     ee_pf = min(round((basic + da) * 0.12, 2), 1800.0)
-    pt = float(sal_rule.get("pt_amount", 200.0)) if sal_rule else 200.0
+    
+    emp_gender = str(emp_data.get("gender", "")).strip().capitalize()
+    pt = 0.0 if emp_gender == "Female" else float(sal_rule.get("pt_amount", 200.0))
+
     ee_esic = round(gross * 0.0075, 2)
     total_ded = ee_pf + pt + ee_esic
     net_take_home = gross - total_ded
@@ -394,326 +391,47 @@ The details of your salary bifurcation are as below -"""
     p2_text = """Kindly sign and return a duplicate copy of this letter as a token of your acceptance of the offer.<br/><br/>
 We look forward to welcoming you to <b>""" + entity_name + """</b>.<br/><br/>
 Yours Sincerely,<br/>
-<b>For """ + entity_name + """</b><br/><br/><br/><br/>
-<b>Authorized Signatory</b><br/><br/>
-<hr/><br/>
-<font size=12><b>Acceptance of Offer</b></font><br/><br/>
-I hereby accept the above offer and agree to join <b>""" + entity_name + """</b>.<br/><br/>
-Employee Name: <b>""" + str(emp_data.get('full_name')) + """</b><br/><br/>
-Signature: ___________________________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ___________________
+<b>For """ + entity_name + """</b>
 """
-# 👈 सही आणि स्टॅम्पचा ब्लॉक असा जोडा
+
     stamp_f, sig_f = get_entity_assets(code_pref)
-    sign_elements = [Paragraph(f"<b>For {entity_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
+    sign_elements = [Spacer(1, 8)]
+
     if stamp_f and sig_f:
-        sign_elements.append(Spacer(1, 4))
+        # Stamp ani Sign doghe ekatra barobar align karnyasathi
         sign_elements.append(Table([[RLImage(stamp_f, width=55, height=55), RLImage(sig_f, width=80, height=40)]], colWidths=[65, 95]))
     elif stamp_f:
-        sign_elements.append(Spacer(1, 4))
         sign_elements.append(RLImage(stamp_f, width=60, height=60))
     elif sig_f:
-        sign_elements.append(Spacer(1, 10))
         sign_elements.append(RLImage(sig_f, width=90, height=45))
     else:
         sign_elements.append(Spacer(1, 35))
 
-    sign_elements.append(Paragraph("<b>Authorized Signatory</b>", ParagraphStyle(name="SignBottom", alignment=1)))
+    sign_elements.append(Spacer(1, 6))
+    sign_elements.append(Paragraph("<b>Authorized Signatory</b>", ParagraphStyle(name="SignBottom", alignment=0)))
 
-    # मजकूर आणि सही-स्टॅम्प एकाच टेबलमध्ये बाजूबाजूला ठेवणे
-    p2_table = Table([[Paragraph(p2_text, styles["Normal"]), sign_elements]], colWidths=[360, 202])
-    p2_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-        ('TOPPADDING', (0,0), (-1,-1), 0),
-    ]))
-    story.append(p2_table)
-
-def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
-    styles = getSampleStyleSheet()
-    story = []
-
-    e_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
-    e_addr = entity_obj.get("address", "A/P Nimgaon tal-khed, Dist-pune") if entity_obj else "A/P Nimgaon tal-khed, Dist-pune"
-    e_gst = entity_obj.get("gst_number", "27CZCPS2976N1ZI") if entity_obj else "27CZCPS2976N1ZI"
-    e_pan = entity_obj.get("pan_number", "CZCPS2976N") if entity_obj else "CZCPS2976N"
-    code_pref = entity_obj.get("code_prefix", "sagar") if entity_obj else "sagar"
-
-    c_name = client_obj.get("name", "DAEBU AUTOMOTIVE SEAT INDIA PVT LTD") if client_obj else "DAEBU AUTOMOTIVE SEAT INDIA PVT LTD"
-    c_addr = client_obj.get("plant_location", "MIDC Chakan, Phase-II, Bhamboli, Pune - 410501") if client_obj else "MIDC Chakan, Phase-II, Bhamboli, Pune - 410501"
-    c_gst = client_obj.get("gst_number", "27AACCD4599E1ZH") if client_obj else "27AACCD4599E1ZH"
-
-    cons_name = inv_data.get("consignee_name") or c_name
-    cons_addr = inv_data.get("consignee_address") or c_addr
-    cons_gst = inv_data.get("consignee_gstin") or c_gst
-
-    inv_no = inv_data.get("invoice_number", "SE/26-27/51")
-    inv_date = inv_data.get("invoice_date", date.today().strftime("%d/%m/%Y"))
-    sub_total = float(inv_data.get("total_amount", 115146.0))
-    cgst = round(sub_total * 0.09, 2)
-    sgst = round(sub_total * 0.09, 2)
-    grand_total = round(sub_total + cgst + sgst, 2)
-
-    h_title = Paragraph("<font size=14><b>Tax Invoice</b></font>", ParagraphStyle(name="InvT", alignment=1))
-    story.append(h_title)
-    story.append(Spacer(1, 5))
-
-    p_from = Paragraph(f"<b>From -</b><br/><b>{e_name}</b><br/>{e_addr}<br/><b>GSTIN/UIN:</b> {e_gst}", styles["Normal"])
-    ref_txt = f"{inv_data.get('reference_no') or '-'} {inv_data.get('reference_date') or ''}"
-    order_txt = f"{inv_data.get('buyers_order_no') or '-'} {inv_data.get('buyers_order_date') or ''}"
-     
-    meta_html = f"""<b>Invoice No:</b> {inv_no}<br/>
-<b>Dated:</b> {inv_date}<br/>
-<b>Reference No. & Date:</b> {ref_txt}<br/>
-<b>Buyer's Order No.:</b> {order_txt}<br/>
-<b>Dispatch Doc No.:</b> {inv_data.get('dispatch_doc_no') or '-'}<br/>
-<b>Dispatched through:</b> {inv_data.get('dispatched_through') or '-'}<br/>
-<b>Bill of Lading/LR-RR No.:</b> {inv_data.get('bill_of_lading_no') or '-'}<br/>
-<b>Terms of Delivery:</b> {inv_data.get('terms_of_delivery') or '-'}"""
-
-    p_meta = Paragraph(meta_html, styles["Normal"])
-    t_top = Table([[p_from, p_meta]], colWidths=[310, 252])
-    t_top.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(t_top)
-
-    p_buyer = Paragraph(f"<b>Buyer (Bill to)</b><br/><b>{c_name}</b><br/>{c_addr}<br/><b>GSTIN:</b> {c_gst}", styles["Normal"])
-    p_disp = Paragraph(f"<b>Consignee (Ship to)</b><br/><b>{cons_name}</b><br/>{cons_addr}<br/><b>GSTIN:</b> {cons_gst}", styles["Normal"])
-    t_mid = Table([[p_disp, p_buyer]], colWidths=[310, 252])
-    t_mid.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(t_mid)
-
-    bill_month = inv_data.get("billing_month", "Aug-2026")
-    items_data = [
-        ["Sr No.", "Description of Services / Goods", "HSN/SAC", "GST Rate", "Quantity", "Rate", "Per", "Amount"],
-        ["1", f"MANPOWER/LABOUR SUPPLY BILL<br/>Month For {bill_month}", inv_data.get("hsn_sac", "996511"), "18%", "1", f"{sub_total:,.2f}", "Nos", f"{sub_total:,.2f}"],
-        ["", "Total (Without GST)", "", "", "", "", "", f"{sub_total:,.2f}"],
-        ["", "CGST", "", "9%", "", "", "", f"{cgst:,.2f}"],
-        ["", "SGST", "", "9%", "", "", "", f"{sgst:,.2f}"],
-        ["", "Total", "", "", "", "", "", f"Rs. {grand_total:,.2f}"]
-    ]
-    t_items = Table([[Paragraph(c, styles["Normal"]) if "<br/>" in str(c) else c for c in row] for row in items_data], colWidths=[35, 195, 55, 45, 40, 65, 35, 92])
-    t_items.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F8FAFC")),
-        ('ALIGN', (0,0), (0,-1), 'CENTER'),
-        ('ALIGN', (7,0), (7,-1), 'RIGHT'),
-        ('FONTNAME', (0,2), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-    ]))
-    story.append(t_items)
-
-    p_words = Paragraph(f"<b>Amount Chargeable (in words):</b><br/>{num_to_words(grand_total)}", styles["Normal"])
-    t_words = Table([[p_words]], colWidths=[562])
-    t_words.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(t_words)
-
-    tax_data = [
-        ["HSN/SAC", "Taxable Value", "Central Tax Rate", "Central Tax Amt", "State Tax Rate", "State Tax Amt", "Total Tax Amount"],
-        ["996511", f"Rs.{sub_total:,.2f}", "9%", f"Rs.{cgst:,.2f}", "9%", f"Rs.{sgst:,.2f}", f"Rs.{(cgst+sgst):,.2f}"],
-        ["Total", f"Rs.{sub_total:,.2f}", "", f"Rs.{cgst:,.2f}", "", f"Rs.{sgst:,.2f}", f"Rs.{(cgst+sgst):,.2f}"]
-    ]
-    t_tax = Table(tax_data, colWidths=[70, 85, 75, 80, 75, 80, 97])
-    t_tax.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 7.5),
-        ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-    ]))
-    story.append(t_tax)
-
-    b_name = entity_obj.get("bank_name", "SARASWAT BANK") if entity_obj else "SARASWAT BANK"
-    b_acc = entity_obj.get("bank_account_no", "610000000045918") if entity_obj else "610000000045918"
-    b_ifsc = entity_obj.get("ifsc_code", "SRCB0000376") if entity_obj else "SRCB0000376"
-
-    decl = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the services described and that all particulars are true and correct."
-    bank_d = f"<b>Company Bank Account Details:</b><br/>BANK: {b_name}<br/>A/C NO: {b_acc}<br/>IFSC: {b_ifsc}"
-     
-    stamp_f, sig_f = get_entity_assets(code_pref)
-    sign_elements = [Paragraph(f"<b>for {e_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
-    if stamp_f and sig_f:
-        sign_elements.append(Spacer(1, 4))
-        sign_elements.append(Table([[RLImage(stamp_f, width=55, height=55), RLImage(sig_f, width=80, height=40)]], colWidths=[65, 95]))
-    elif stamp_f:
-        sign_elements.append(Spacer(1, 4))
-        sign_elements.append(RLImage(stamp_f, width=60, height=60))
-    elif sig_f:
-        sign_elements.append(Spacer(1, 10))
-        sign_elements.append(RLImage(sig_f, width=90, height=45))
-    else:
-        sign_elements.append(Spacer(1, 35))
-
-    sign_elements.append(Paragraph("<b>Authorised Signatory</b>", ParagraphStyle(name="SignBottom", alignment=1)))
-
-    t_bottom = Table([[Paragraph(decl + "<br/><br/>" + bank_d, styles["Normal"]), sign_elements]], colWidths=[360, 202])
-    t_bottom.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('PADDING', (0,0), (-1,-1), 5),
-    ]))
-    story.append(t_bottom)
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-def generate_salary_payslip(emp_data, entity_obj, client_name, month_str, sal_rule, att_summary, deductions_data):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
-    styles = getSampleStyleSheet()
-    story = []
-
-    entity_name = entity_obj.get("name", "SAGAR ENTERPRISES") if entity_obj else "SAGAR ENTERPRISES"
-    ent_addr = entity_obj.get("address", "A/p: Nimgaon tal-khed, Dist-pune") if entity_obj else "A/p: Nimgaon tal-khed, Dist-pune"
-
-    header_html = f"""<font size=13><b>SALARY SLIP FOR THE MONTH OF {month_str.upper()}</b></font><br/>
-    <font size=11><b>{entity_name}</b></font><br/>
-    <font size=8 color='#475569'>{ent_addr}</font>"""
-     
-    p_center_head = Paragraph(header_html, ParagraphStyle(name="CenterHeadPayslip", alignment=1, leading=16))
-    story.append(p_center_head)
-    story.append(Spacer(1, 10))
-
-    doj_val = str(emp_data.get("joining_date") or emp_data.get("created_at") or "")
-    if "T" in doj_val: doj_val = doj_val.split("T")[0]
-
-    emp_info_data = [
-        ["Emp. Code:", str(emp_data.get("employee_code", "N/A")), "Paid Days:", str(att_summary.get("paid_days", 0))],
-        ["Name:", str(emp_data.get("full_name", "N/A")), "Total Days:", str(att_summary.get("total_days", 0))],
-        ["Designation:", str(emp_data.get("designation", "Staff")), "Bank Name:", str(emp_data.get("bank_name", "N/A"))],
-        ["Client Site:", str(client_name), "Bank A/c No.:", str(emp_data.get("bank_account_no", "N/A"))],
-        ["DOJ:", doj_val, "PAN No.:", str(emp_data.get("pan_number", "N/A"))],
-        ["Category:", str(emp_data.get("category", "Semi-Skilled")), "Aadhaar No.:", "[Aadhaar Redacted]"]
-    ]
-    t_emp = Table(emp_info_data, colWidths=[95, 185, 95, 187])
-    t_emp.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
-        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-    ]))
-    story.append(t_emp)
-    story.append(Spacer(1, 8))
-
-    rate_basic = float(sal_rule.get("basic", 0.0)) if sal_rule else 0.0
-    rate_da = float(sal_rule.get("da", 0.0)) if sal_rule else 0.0
-    rate_hra = float(sal_rule.get("hra", 0.0)) if sal_rule else 0.0
-
-    earned_basic = deductions_data.get('earned_basic', 0.0)
-    earned_da = deductions_data.get('earned_da', 0.0)
-    earned_hra = deductions_data.get('earned_hra', 0.0)
-    ot_amt = deductions_data.get('ot_amount', 0.0)
-    total_gross = earned_basic + earned_da + earned_hra + ot_amt
-
-    pf_ded = deductions_data.get('pf_ded', 0.0)
-    esic_ded = deductions_data.get('esic_ded', 0.0)
-    pt_ded = deductions_data.get('pt_ded', 0.0)
-    adv_ded = deductions_data.get('adv_val', 0.0)
-    ppe_ded = deductions_data.get('ppe_ded', 0.0)
-    total_ded = pf_ded + esic_ded + pt_ded + adv_ded + ppe_ded
-    net_salary = total_gross - total_ded
-
-    calc_table_data = [
-        ["Earnings in Rs.", "Monthly Rate", "Earned (Rs.)", "Deductions", "Amount Rs."],
-        ["Basic", f"{rate_basic:,.2f}", f"{earned_basic:,.2f}", "Provident Fund (PF)", f"{pf_ded:,.2f}"],
-        ["D.A.", f"{rate_da:,.2f}", f"{earned_da:,.2f}", "ESIC", f"{esic_ded:,.2f}"],
-        ["H.R.A.", f"{rate_hra:,.2f}", f"{earned_hra:,.2f}", "Prof. Tax (PT)", f"{pt_ded:,.2f}"],
-        ["Overtime Pay (OT)", "-", f"{ot_amt:,.2f}", "Salary Advance", f"{adv_ded:,.2f}"],
-        ["", "", "", "Uniform / PPE Deduction", f"{ppe_ded:,.2f}"],
-        ["Gross Earning", "", f"{total_gross:,.2f}", "Total Deductions", f"{total_ded:,.2f}"]
-    ]
-
-    t_calc = Table(calc_table_data, colWidths=[120, 80, 80, 202, 80])
-    t_calc.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F1F5F9")),
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#F8FAFC")),
-        ('ALIGN', (1,1), (2,-1), 'RIGHT'),
-        ('ALIGN', (4,1), (4,-1), 'RIGHT'),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-    ]))
-    story.append(t_calc)
-
-    t_net = Table([["Net Salary", f"Rs. {net_salary:,.2f}"]], colWidths=[280, 282])
-    t_net.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#EFF6FF")),
-        ('ALIGN', (1,0), (1,0), 'RIGHT'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(t_net)
-
-    t_words = Table([
-        [Paragraph(f"<b>Amount in Words:</b> <b>{num_to_words(net_salary)}</b>", styles["Normal"])],
-        [Paragraph("<b>Remarks:</b> Salary calculated based on approved muster and leave records.", styles["Normal"])],
-        [Paragraph("<font size=7 color='#64748B'><i>This is a computer-generated salary slip and does not require any signature.</i></font>", ParagraphStyle(name="NoteP", alignment=1))]
-    ], colWidths=[562])
-    t_words.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#94A3B8")),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-    ]))
-    story.append(t_words)
-
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-def export_source_code_pdf():
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
-    story = []
-    styles = getSampleStyleSheet()
+    # Mazkur ani Sign-Stamp ekach flow madhe thevane
+    story.append(Paragraph(p2_text, styles["Normal"]))
+    story.append(Spacer(1, 4))
     
-    code_text = ""
-    try:
-        with open(__file__, "r", encoding="utf-8") as f:
-            code_text = f.read()
-    except Exception:
-        code_text = "# Error loading source file."
-
-    pre = Preformatted(code_text, ParagraphStyle('Code', fontName='Courier', fontSize=5.5, leading=7))
-    story.append(pre)
-    doc.build(story)
+    for el in sign_elements:
+        story.append(el)
+        
+    story.append(Spacer(1, 15))
+    story.append(Paragraph("<hr/>", styles["Normal"]))
+    story.append(Spacer(1, 10))
+    
+    acceptance_text = """
+    <font size=12><b>Acceptance of Offer</b></font><br/><br/>
+    I hereby accept the above offer and agree to join <b>""" + entity_name + """</b>.<br/><br/>
+    Employee Name: <b>""" + str(emp_data.get('full_name')) + """</b><br/><br/>
+    Signature: ___________________________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ___________________
+    """
+    story.append(Paragraph(acceptance_text, styles["Normal"]))
+    
+    doc.build(story, onFirstPage=draw_fixed_footer, onLaterPages=draw_fixed_footer)
     buffer.seek(0)
     return buffer.getvalue()
-
 # =============================================================================
 # 2. PUBLIC INTERFACE (LOGIN & ONBOARDING)
 # =============================================================================
@@ -2178,7 +1896,16 @@ else:
             st.subheader("Monthly Payroll Engine & Wage Sheet (Exact 43 Columns Layout)")
 
             p_col1, p_col2, p_col3 = st.columns(3)
-            sel_month = p_col1.selectbox("Select Payroll Month *", ["August 2026", "September 2026", "October 2026", "November 2026"])
+            # 👈 Current date pasun pudhche mahine aapoap generate honar (Automatic & Dynamic)
+            current_dt = date.today()
+            dynamic_months = []
+            for i in range(6):  # Chaloo mahina ani pudhche 5 mahine
+                  future_m = current_dt + timedelta(days=30 * i)
+                  m_str = future_m.strftime("%B %Y")
+                  if m_str not in dynamic_months:
+                      dynamic_months.append(m_str)
+
+            sel_month = p_col1.selectbox("Select Payroll Month *", dynamic_months)
             
             ent_list = fetch_cached_entities()
             cli_list = fetch_cached_clients()
@@ -2515,7 +2242,69 @@ else:
             ent_list = fetch_cached_entities()
             c_dict = {c["name"]: c for c in cli_list}
             e_dict = {e["name"]: e for e in ent_list}
+            def generate_exact_tax_invoice(inv_data, entity_obj, client_obj):
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=25, leftMargin=25, topMargin=25, bottomMargin=25)
+                styles = getSampleStyleSheet()
+                story = []
 
+                e_name = entity_obj.get("name", "GEMSHINE MULTISERVICES") if entity_obj else "GEMSHINE MULTISERVICES"
+                e_addr = entity_obj.get("address", "Ground Floor, Gat No. 235, Rajgurunagar, Maharashtra - 410505") if entity_obj else "Ground Floor, Gat No. 235, Rajgurunagar, Maharashtra - 410505"
+                e_gst = entity_obj.get("gst_number", "27ABEFG0561D1ZS") if entity_obj else "27ABEFG0561D1ZS"
+                code_pref = entity_obj.get("code_prefix", "GM") if entity_obj else "GM"
+
+                c_name = client_obj.get("name", "Client Site") if client_obj else "Client Site"
+                c_addr = client_obj.get("plant_location", "Maharashtra") if client_obj else "Maharashtra"
+                c_gst = client_obj.get("gst_number", "27AAAAA0000A1Z5") if client_obj else "27AAAAA0000A1Z5"
+
+                inv_no = inv_data.get("invoice_number", "SE/26-27/51")
+                inv_date = inv_data.get("invoice_date", date.today().strftime("%d/%m/%Y"))
+                sub_total = float(inv_data.get("total_amount", 115146.0))
+                cgst = round(sub_total * 0.09, 2)
+                sgst = round(sub_total * 0.09, 2)
+                grand_total = round(sub_total + cgst + sgst, 2)
+
+                h_title = Paragraph("<font size=14><b>Tax Invoice</b></font>", ParagraphStyle(name="InvT", alignment=1))
+                story.append(h_title)
+                story.append(Spacer(1, 5))
+
+                p_from = Paragraph(f"<b>From -</b><br/><b>{e_name}</b><br/>{e_addr}<br/><b>GSTIN/UIN:</b> {e_gst}", styles["Normal"])
+                p_meta = Paragraph(f"<b>Invoice No:</b> {inv_no}<br/><b>Dated:</b> {inv_date}", styles["Normal"])
+    
+                t_top = Table([[p_from, p_meta]], colWidths=[310, 252])
+                t_top.setStyle(TableStyle([
+                   ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+                   ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                   ('PADDING', (0,0), (-1,-1), 4),
+                ]))
+                story.append(t_top)
+
+                p_buyer = Paragraph(f"<b>Buyer (Bill to)</b><br/><b>{c_name}</b><br/>{c_addr}<br/><b>GSTIN:</b> {c_gst}", styles["Normal"])
+                t_mid = Table([[p_buyer]], colWidths=[562])
+                t_mid.setStyle(TableStyle([
+                  ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+                  ('PADDING', (0,0), (-1,-1), 4),
+                ]))
+                story.append(t_mid)
+
+                bill_month = inv_data.get("billing_month", "Aug-2026")
+                items_data = [
+                 ["Sr No.", "Description of Services", "HSN/SAC", "GST Rate", "Amount"],
+                 ["1", f"MANPOWER SUPPLY BILL<br/>Month For {bill_month}", "996511", "18%", f"{sub_total:,.2f}"],
+                 ["", "Total", "", "", f"Rs. {grand_total:,.2f}"]
+                ]
+                t_items = Table(items_data, colWidths=[40, 262, 70, 70, 120])
+                t_items.setStyle(TableStyle([
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F8FAFC")),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0,0), (-1,-1), 8.5),
+                    ('PADDING', (0,0), (-1,-1), 4),
+                ]))
+                story.append(t_items)
+                doc.build(story)
+                buffer.seek(0)
+                return buffer.getvalue()
             with t_inv_gen:
                 with st.form("generate_tax_inv_advanced_form"):
                     st.write("##### 1. Supplier (Entity) & Buyer (Client) Selection")
@@ -2594,6 +2383,7 @@ else:
                         with st.expander(f"Invoice: {inv.get('invoice_number')} | Month: {inv.get('billing_month')} | Total: Rs.{inv.get('total_amount', 0):,.2f}"):
                             ent_obj = next((e for e in ent_list if e["id"] == inv.get("entity_id")), None)
                             cli_obj = next((c for c in cli_list if c["id"] == inv.get("client_id")), None)
+                                
                             inv_pdf = generate_exact_tax_invoice(inv, ent_obj, cli_obj)
                             st.download_button(
                                 f"Download Tax Invoice PDF ({inv.get('invoice_number')})", 
@@ -3568,15 +3358,15 @@ else:
             
             st.markdown("##### 📍 Live GPS Sensor Status")
             
-            # Streamlit custom component to grab user's real latitude & longitude via browser
+            # JavaScript to force live GPS fetching and auto-reload with coordinates
             loc_code = """
             <div id="loc-status" style="font-family:sans-serif; font-size:13px; color:#059669; font-weight:600; margin-bottom:10px;">
-                🔄 Fetching live GPS location from your phone...
+                🔄 Fetching live GPS location...
             </div>
             <script>
             function getLocation() {
                 if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(showPosition, showError, {timeout: 10000, enableHighAccuracy: true});
+                    navigator.geolocation.getCurrentPosition(showPosition, showError, {timeout: 15000, enableHighAccuracy: true});
                 } else {
                     document.getElementById("loc-status").innerHTML = "❌ Geolocation is not supported by this browser.";
                 }
@@ -3586,14 +3376,16 @@ else:
                 const lon = position.coords.longitude;
                 document.getElementById("loc-status").innerHTML = "✅ Live GPS Locked: Lat " + lat.toFixed(6) + ", Lon " + lon.toFixed(6);
                 
-                // Pass values back via URL query params or session state if needed
+                // Automatically append lat & lon to URL query params and reload if not present
                 const url = new URL(window.location.href);
-                url.searchParams.set('user_lat', lat);
-                url.searchParams.set('user_lon', lon);
-                window.history.replaceState({}, '', url);
+                if (!url.searchParams.has('user_lat') || !url.searchParams.has('user_lon')) {
+                    url.searchParams.set('user_lat', lat);
+                    url.searchParams.set('user_lon', lon);
+                    window.location.href = url.toString();
+                }
             }
             function showError(error) {
-                document.getElementById("loc-status").innerHTML = "⚠️ GPS Error: Please enable phone Location/GPS permission.";
+                document.getElementById("loc-status").innerHTML = "⚠️ GPS Error: Please enable browser location permissions.";
             }
             getLocation();
             </script>
@@ -3625,10 +3417,16 @@ else:
 
                 if st.form_submit_button("Thumb / Geo Punch Now", type="primary"):
                     current_time_str = datetime.now().strftime("%H:%M:%S")
-                    geofence_passed = True
-                    dist_meters = 0.0
+                    geofence_passed = False
+                    dist_meters = 999999.0 # Default out of range
 
-                    if client_record and not is_offline_mode:
+                    # युजरने ब्राउझरमध्ये लोकेशन अ‍ॅक्सेस दिले आहे का याची खात्री करणे
+                    # (जर युजरने URL मधून user_lat/user_lon पास केले नसतील तर डिफॉल्ट बायपास रोखणे)
+                    has_live_gps = "user_lat" in st.query_params and "user_lon" in st.query_params
+
+                    if not has_live_gps:
+                        st.error("❌ Location Error: Live GPS coordinates not received. Please enable browser location permissions and refresh!")
+                    elif client_record:
                         c_lat = float(client_record[0].get("latitude", 18.651200))
                         c_lon = float(client_record[0].get("longitude", 73.805500))
                         
@@ -3639,14 +3437,13 @@ else:
                         c = 2 * math.asin(math.sqrt(a))
                         dist_meters = c * 6371000
 
-                        if dist_meters > 50.0:
-                            geofence_passed = False
+                        # 👇 अत्यंत कठोर 15 मीटरची मर्यादा
+                        if dist_meters <= 15.0:
+                            geofence_passed = True
 
-                    if not geofence_passed:
-                        st.error(f"❌ Invalid Location: You are outside the plant geofence radius (Distance: {dist_meters:.1f}m).")
-                    elif is_offline_mode:
-                        st.warning("⚠️ Offline Mode: Punch saved locally.")
-                    else:
+                    if not geofence_passed and has_live_gps:
+                        st.error(f"❌ Invalid Punch: Tumhi plant chya 15 meter radius chya baher ahat! (Antar: {dist_meters:.1f}m). Punch reject zala.")
+                    elif geofence_passed and has_live_gps:
                         check_att = supabase.table("attendance").select("id, punch_in").eq("employee_id", emp_id).eq("date", today_date_str).execute().data
 
                         if not check_att:
@@ -3659,7 +3456,7 @@ else:
                                 "ot_hours": 0.0,
                                 "is_valid_geo": True
                             }).execute()
-                            st.toast("✅ First Punch-In Recorded Successfully!")
+                            st.toast("✅ First Punch-In Recorded Successfully within 15m!")
                         else:
                             att_id = check_att[0]["id"]
                             supabase.table("attendance").update({
