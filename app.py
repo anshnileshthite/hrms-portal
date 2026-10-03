@@ -731,8 +731,8 @@ if not st.session_state.user:
             col_left, col_right = st.columns(2)
             c_name = col_left.text_input("Candidate Full Name *", value=st.session_state.c_name_val)
             c_father = col_left.text_input("Father's Name *", value=st.session_state.c_father_val)
+            c_dob_str = col_left.text_input("Date of Birth (DOB) *", placeholder="DD/MM/YYYY")
             c_gender = col_left.selectbox("Gender *", ["Male", "Female", "Other"])
-            c_dob = col_left.date_input("Date of Birth (DOB) *",min_value=date(1940, 1, 1),max_value=date.today(),value=date(1998, 1, 1),format="DD/MM/YYYY")
             c_marital = col_left.selectbox("Marital Status", ["Single", "Married"])
             c_phone = col_left.text_input("Employee Mobile Number * (10 Digits)", value=st.session_state.c_phone_val)
             c_emergency = col_left.text_input("Emergency Contact Number *", value=st.session_state.c_emg_val)
@@ -3646,8 +3646,19 @@ else:
                 sel_m_picker = st.date_input("Select Month (Any date in month)", value=date.today(), key="emp_m_att_picker")
                 yr_m, mo_m = sel_m_picker.year, sel_m_picker.month
                 
-                month_prefix = f"{yr_m}-{mo_m:02d}"
-                month_atts = supabase.table("attendance").select("*").eq("employee_id", emp_id).like("date", f"{month_prefix}%").order("date", desc=True).execute().data or []
+                # महिना सुरू होण्याची आणि संपण्याची तारीख काढणे
+                import calendar
+                last_day = calendar.monthrange(yr_m, mo_m)[1]
+                start_date_str = f"{yr_m}-{mo_m:02d}-01"
+                end_date_str = f"{yr_m}-{mo_m:02d}-{last_day}"
+                
+                # Like ऐवजी gte (greater than equal) आणि lte (less than equal) वापरणे
+                month_atts = []
+                try:
+                    res_m = supabase.table("attendance").select("*").eq("employee_id", emp_id).gte("date", start_date_str).lte("date", end_date_str).order("date", desc=True).execute()
+                    month_atts = res_m.data or []
+                except Exception:
+                    month_atts = []
                 
                 if month_atts:
                     # Metrics Summary
