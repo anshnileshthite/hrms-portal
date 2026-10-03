@@ -201,19 +201,25 @@ def num_to_words(number):
 def get_exact_salary_rule(entity_id, client_id, designation, category):
     try:
         if not entity_id:
-            all_s = supabase.table("salary_structures").select("*").limit(1).execute().data
-            return all_s[0] if all_s else None
-        sr_query = supabase.table("salary_structures").select("*").eq("entity_id", entity_id)
-        if client_id: sr_query = sr_query.eq("client_id", client_id)
-        if designation: sr_query = sr_query.ilike("designation", designation.strip())
-        if category: sr_query = sr_query.eq("category", category.strip())
-        matched = sr_query.execute().data
-        if matched: return matched[0]
-        fb1 = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).execute().data
-        if fb1: return fb1[0]
-        fb2 = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).execute().data
-        if fb2: return fb2[0]
-    except Exception: pass
+            return None
+        
+        # 1. Strict Match: Entity, Client ani Designation
+        res = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).ilike("designation", str(designation).strip()).execute().data
+        if res:
+            return res[0]
+        
+        # 2. Fallback Match: Fakt Entity ani Client varun rule shodha
+        res_client = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).eq("client_id", client_id).execute().data
+        if res_client:
+            return res_client[0]
+            
+        # 3. Last Fallback: Fakt Entity varun
+        res_ent = supabase.table("salary_structures").select("*").eq("entity_id", entity_id).execute().data
+        if res_ent:
+            return res_ent[0]
+    except Exception:
+        pass
+        
     return None
 
 def update_leave_accrual(emp_id):
