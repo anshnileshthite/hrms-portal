@@ -20,21 +20,21 @@ from reportlab.lib import colors
 # -------------------------------------------------------------
 st.set_page_config(page_title="ESS PORTAL | HRMS ENTERPRISE", layout="wide")
 
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=60)
 def fetch_cached_entities():
     try:
         return supabase.table("entities").select("*").execute().data or []
     except Exception:
         return []
 
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=60)
 def fetch_cached_clients():
     try:
         return supabase.table("clients").select("*").execute().data or []
     except Exception:
         return []
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=30)
 def fetch_cached_employees():
     try:
         return supabase.table("employees").select("*").execute().data or []
@@ -807,10 +807,11 @@ if not st.session_state.user:
                                 if up_aadhar: upload_employee_doc(up_aadhar, cand_id, "aadhar")
                                 if up_pan: upload_employee_doc(up_pan, cand_id, "pan")
                                 if up_bank: upload_employee_doc(up_bank, cand_id, "bank")
-
-                            st.cache_data.clear()
-                            st.toast("✅ Application submitted successfully!")
-                            st.success("Application submitted successfully! Forwarded to Supervisor.")
+                                if st.form_submit_button("Save New Employee", type="primary"):
+                            
+                                    st.cache_data.clear()
+                                    st.toast("✅ Application submitted successfully!")
+                                    st.success("Application submitted successfully! Forwarded to Supervisor.")
                             for k in ["c_name_val","c_father_val","c_phone_val","c_emg_val","c_addr_val","c_uan_val","c_esic_val","c_bank_val","c_branch_val","c_acc_val","c_ifsc_val","c_pan_val","c_aadhar_val"]:
                                 st.session_state[k] = ""
                             pytime.sleep(1)
@@ -2900,12 +2901,11 @@ else:
                             target_ent_id = e_map.get(s_ent)
                             target_cli_id = c_map.get(s_cli)
 
+                            # ॲडमिनने Salary Structure मध्ये तयार केलेले सर्व डिझिग्नेशन्स फेच करणे
                             sal_rules_res = []
                             try:
-                                q_sr = supabase.table("salary_structures").select("designation, category").eq("entity_id", target_ent_id)
-                                if target_cli_id:
-                                    q_sr = q_sr.eq("client_id", target_cli_id)
-                                sal_rules_res = q_sr.execute().data or []
+                                q_sr = supabase.table("salary_structures").select("designation, category").execute()
+                                sal_rules_res = q_sr.data or []
                             except Exception:
                                 sal_rules_res = []
 
