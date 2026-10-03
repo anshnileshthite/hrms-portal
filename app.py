@@ -1401,11 +1401,17 @@ else:
                     v1, v2 = st.columns(2)
                     with v1:
                         st.markdown("##### 1. Official Offer Letter")
-                        offer_pdf = generate_official_offer_letter(v_emp, v_ent_obj, v_cli_name, v_sal_rule)
-                        st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"vault_dl_off_{v_id}")
-                        
-                        up_custom_offer = st.file_uploader("Upload Signed Custom Offer Letter (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_up_custom_off_{v_id}")
-                        if st.button("Save Custom Offer Letter", key=f"vault_btn_cust_off_{v_id}"):
+                        try:
+                            offer_pdf = generate_official_offer_letter(v_emp, v_ent_obj, v_cli_name, v_sal_rule) or b""
+                        except Exception as e:
+                            offer_pdf = b""
+                    if offer_pdf:
+                                st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"dl_off_{v_id}")
+                    else:
+                                st.error("Offer letter generate hotana adchan ahe. Krupaya employee che salary rules ani details tapse check kara.")
+                    st.download_button("Download System-Generated Offer Letter (PDF)", data=offer_pdf, file_name=f"Offer_{v_emp.get('employee_code')}.pdf", mime="application/pdf", key=f"vault_dl_off_{v_id}")
+                    up_custom_offer = st.file_uploader("Upload Signed Custom Offer Letter (Max 2MB)", type=["pdf", "jpg", "png"], key=f"vault_up_custom_off_{v_id}")
+                    if st.button("Save Custom Offer Letter", key=f"vault_btn_cust_off_{v_id}"):
                             if up_custom_offer and upload_employee_doc(up_custom_offer, v_id, "offer"):
                                 st.success("Custom Offer Letter uploaded!")
                                 st.rerun()
