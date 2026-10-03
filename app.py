@@ -1244,7 +1244,12 @@ else:
                 if all_emps:
                     emp_opt_map = {f"[{e.get('employee_code', 'TEMP')}] {e.get('full_name')} (ID: {e['id'][:6]})": e for e in all_emps}
                     sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()))
-                    curr_emp = emp_opt_map[sel_emp_to_edit]
+                    curr_emp = emp_opt_map.get(sel_emp_to_edit)
+
+                    # 👇 He safe check add kara mhanje error येणार nahi
+                    if not curr_emp:
+                        st.info("Krupaya eka valid employee la select kara.")
+                        st.stop()
 
                     with st.form("edit_emp_100pct_form"):
                         st.write("##### 1. Login Details")
@@ -2870,18 +2875,8 @@ else:
         if selected_sup_panel == "Candidate Onboarding & Review":
             st.subheader("Candidate Onboarding Verification & Credential Assignment")
 
-            # Base query: Pending supervisor kinva Rejected status aslele records
+            # Sarv pending kinva rejected candidates fetch karne
             cand_query = supabase.table("employees").select("*").in_("status", ["PENDING_SUPERVISOR", "REJECTED_TO_SUPERVISOR"])
-
-        # Filter logic: Supervisor chi swatahachi site/entity ASLELE + jyana ajun assign kelele nahi (NULL) te sarv records
-            if sup_ent_id and sup_cli_id:
-            # Supervisor chya entity/client che records KINVA jyache client_id/entity_id NULL ahet te sarv
-                 cand_query = cand_query.or_(f"and(entity_id.eq.{sup_ent_id},client_id.eq.{sup_cli_id}),entity_id.is.null,client_id.is.null")
-            elif sup_ent_id:
-                 cand_query = cand_query.or_(f"entity_id.eq.{sup_ent_id},entity_id.is.null")
-            elif sup_cli_id:
-                 cand_query = cand_query.or_(f"client_id.eq.{sup_cli_id},client_id.is.null")
-
             cand_list = cand_query.execute().data or []
 
             ent_list = fetch_cached_entities()
@@ -2892,129 +2887,122 @@ else:
             c_rev_map = {c["id"]: c["name"] for c in cli_list}
 
             if cand_list:
-                for c in cand_list:
-                    with st.expander(f"Candidate: {c['full_name']} (Mobile: {c['phone_number']}) | Status: {c.get('status')}"):
-                        if c.get("admin_remarks"):
-                            st.error(f"Admin Correction Notes: {c['admin_remarks']}")
+                # 👇 Khup sare employees aslyamule yithe dropdown tayar kela ahe
+                cand_options_map = {
+                    f"[{c.get('employee_code', 'NEW')}] {c.get('full_name')} (Mobile: {c.get('phone_number')}) - Status: {c.get('status')}": c 
+                    for c in cand_list
+                }
+                
+                selected_cand_label = st.selectbox("Select Pending Candidate to Verify *", list(cand_options_map.keys()), key="sup_cand_dropdown_select")
+                c = cand_options_map[selected_cand_label]
+                
+                st.write(f"##### Reviewing: **{c.get('full_name')}**")
+                if c.get("admin_remarks"):
+                    st.error(f"Admin Correction Notes: {c['admin_remarks']}")
 
-                        with st.form(f"sup_verify_form_{c['id']}"):
-                            st.write("##### 1. Identification & Credentials")
-                            sc1, sc2, sc3 = st.columns(3)
-                            s_code = sc1.text_input("Employee Code *", value=c.get("employee_code") or f"SE{str(c['id'])[:4].upper()}").strip().upper()
-                            s_uid = sc2.text_input("User ID *", value=c.get("user_id") or s_code).strip()
-                            s_pwd = sc3.text_input("Portal Password *", value=c.get("password") or f"emp{c['phone_number'][-4:]}")
+                with st.form(f"sup_verify_form_{c['id']}"):
+                    st.write("##### 1. Identification & Credentials")
+                    sc1, sc2, sc3 = st.columns(3)
+                    s_code = sc1.text_input("Employee Code *", value=c.get("employee_code") or f"SE{str(c['id'])[:4].upper()}").strip().upper()
+                    s_uid = sc2.text_input("User ID *", value=c.get("user_id") or s_code).strip()
+                    s_pwd = sc3.text_input("Portal Password *", value=c.get("password") or f"emp{c['phone_number'][-4:]}")
 
-                            st.write("##### 2. Organization, Client Site & Zone Assignment")
-                            sc4, sc5 = st.columns(2)
-                            c_ent_name = e_rev_map.get(sup_ent_id or c.get("entity_id"))
-                            s_ent = sc4.selectbox("Assigned Entity / Firm *", [c_ent_name] if c_ent_name else list(e_map.keys()), key=f"se_{c['id']}")
-                            c_cli_name = c_rev_map.get(sup_cli_id or c.get("client_id"))
-                            s_cli = sc5.selectbox("Assigned Client Site *", [c_cli_name] if c_cli_name else list(c_map.keys()), key=f"sc_{c['id']}")
+                    st.write("##### 2. Organization, Client Site & Zone Assignment")
+                    sc4, sc5 = st.columns(2)
+                    c_ent_name = e_rev_map.get(sup_ent_id or c.get("entity_id"))
+                    s_ent = sc4.selectbox("Assigned Entity / Firm *", [c_ent_name] if c_ent_name else list(e_map.keys()), key=f"se_{c['id']}")
+                    c_cli_name = c_rev_map.get(sup_cli_id or c.get("client_id"))
+                    s_cli = sc5.selectbox("Assigned Client Site *", [c_cli_name] if c_cli_name else list(c_map.keys()), key=f"sc_{c['id']}")
 
-                            sc6, sc7 = st.columns(2)
-                            s_dept = sc6.text_input("Department", value=c.get("department") or "Facility")
-                            s_zone = sc7.selectbox("Zone *", ["Zone - 1", "Zone - 2", "Zone - 3"], index=2)
+                    sc6, sc7 = st.columns(2)
+                    s_dept = sc6.text_input("Department", value=c.get("department") or "Facility")
+                    s_zone = sc7.selectbox("Zone *", ["Zone - 1", "Zone - 2", "Zone - 3"], index=2)
 
-                            st.write("##### 3. Shift, Timings & Commercials")
-                            sc_s1, sc_s2, sc_s3 = st.columns(3)
+                    st.write("##### 3. Shift, Timings & Commercials")
+                    sc_s1, sc_s2, sc_s3 = st.columns(3)
 
-                            # 1. Shift Selection
-                            curr_shift = c.get("shift_timing") or STANDARD_SHIFTS[0]
-                            shift_idx = STANDARD_SHIFTS.index(curr_shift) if curr_shift in STANDARD_SHIFTS else 0
-                            s_shift = sc_s1.selectbox(
-                                "Assigned Shift Timing *", 
-                                STANDARD_SHIFTS, 
-                                index=shift_idx, 
-                                key=f"sup_shift_{c['id']}"
-                            )
+                    curr_shift = c.get("shift_timing") or STANDARD_SHIFTS[0]
+                    shift_idx = STANDARD_SHIFTS.index(curr_shift) if curr_shift in STANDARD_SHIFTS else 0
+                    s_shift = sc_s1.selectbox("Assigned Shift Timing *", STANDARD_SHIFTS, index=shift_idx, key=f"sup_shift_{c['id']}")
 
-                            # 2. Weekly Off Day Selection
-                            wo_opts = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-                            curr_wo = c.get("weekly_off_day") or "Sunday"
-                            wo_idx = wo_opts.index(curr_wo) if curr_wo in wo_opts else 0
-                            s_wo = sc_s2.selectbox(
-                                 "Weekly Off Day *", 
-                                 wo_opts, 
-                                index=wo_idx, 
-                                key=f"sup_wo_{c['id']}"
-                            )
+                    wo_opts = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+                    curr_wo = c.get("weekly_off_day") or "Sunday"
+                    wo_idx = wo_opts.index(curr_wo) if curr_wo in wo_opts else 0
+                    s_wo = sc_s2.selectbox("Weekly Off Day *", wo_opts, index=wo_idx, key=f"sup_wo_{c['id']}")
 
-                            # 3. Joining Date Selection
-                            raw_c_join = c.get("joining_date") or c.get("created_at")
-                            try:
-                                 def_join = datetime.strptime(str(raw_c_join).split("T")[0], "%Y-%m-%d").date() if raw_c_join else date.today()
-                            except Exception:
-                                  def_join = date.today()
+                    raw_c_join = c.get("joining_date") or c.get("created_at")
+                    try:
+                         def_join = datetime.strptime(str(raw_c_join).split("T")[0], "%Y-%m-%d").date() if raw_c_join else date.today()
+                    except Exception:
+                          def_join = date.today()
 
-                            s_join_date = sc_s3.date_input(
-                                "Joining Date *", 
-                                value=def_join, 
-                                format="DD/MM/YYYY", 
-                                key=f"sup_join_{c['id']}"
-                            )
+                    s_join_date = sc_s3.date_input("Joining Date *", value=def_join, format="DD/MM/YYYY", key=f"sup_join_{c['id']}")
 
-                            st.write("##### 3. Dynamic Designations & Commercial Rules (From Salary Structure)")
-                            target_ent_id = e_map.get(s_ent)
-                            target_cli_id = c_map.get(s_cli)
+                    st.write("##### 4. Dynamic Designations & Commercial Rules")
+                    target_ent_id = e_map.get(s_ent)
+                    target_cli_id = c_map.get(s_cli)
 
-                            # ॲडमिनने Salary Structure मध्ये तयार केलेले सर्व डिझिग्नेशन्स फेच करणे
-                            sal_rules_res = []
-                            try:
-                                q_sr = supabase.table("salary_structures").select("designation, category").execute()
-                                sal_rules_res = q_sr.data or []
-                            except Exception:
-                                sal_rules_res = []
+                    sal_rules_res = []
+                    try:
+                        q_sr = supabase.table("salary_structures").select("designation, category").execute()
+                        sal_rules_res = q_sr.data or []
+                    except Exception:
+                        sal_rules_res = []
 
-                            available_designations = list(set([r["designation"] for r in sal_rules_res if r.get("designation")]))
-                            if not available_designations:
-                                available_designations = ["Welder A", "Welder B", "Supervisor", "Helper", "Housekeeping Associate"]
+                    available_designations = list(set([r["designation"] for r in sal_rules_res if r.get("designation")]))
+                    if not available_designations:
+                        available_designations = ["Welder A", "Welder B", "Supervisor", "Helper", "Housekeeping Associate"]
 
-                            sd1, sd2, sd3 = st.columns(3)
-                            s_cat = sd1.selectbox("Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key=f"cat_{c['id']}")
+                    sd1, sd2, sd3 = st.columns(3)
+                    s_cat = sd1.selectbox("Category *", ["Skilled", "Semi-Skilled", "Unskilled"], index=1, key=f"cat_{c['id']}")
 
-                            curr_desig = c.get("designation")
-                            d_idx = available_designations.index(curr_desig) if curr_desig in available_designations else 0
-                            s_desig = sd2.selectbox("Designation (From Salary Structure) *", available_designations, index=d_idx, key=f"desig_{c['id']}")
-                            s_ot = sd3.number_input("Custom OT Rate / Hour", min_value=0.0, step=10.0, value=float(c.get("ot_rate_per_hour") or 0.0), key=f"ot_{c['id']}")
+                    curr_desig = c.get("designation")
+                    d_idx = available_designations.index(curr_desig) if curr_desig in available_designations else 0
+                    s_desig = sd2.selectbox("Designation *", available_designations, index=d_idx, key=f"desig_{c['id']}")
+                    s_ot = sd3.number_input("Custom OT Rate / Hour", min_value=0.0, step=10.0, value=float(c.get("ot_rate_per_hour") or 0.0), key=f"ot_{c['id']}")
 
-                            
-                            st.write("##### 4. Document Verification Check")
-                            v_col1, v_col2 = st.columns(2)
-                            with v_col1:
-                                if c.get("photo_file"):
-                                    st.markdown(f"📷 [Photo Verified]({c['photo_file']})")
-                                if c.get("aadhar_file"):
-                                    st.markdown(f"📄 [Aadhaar Verified]({c['aadhar_file']})")
-                            with v_col2:
-                                if c.get("pan_file"):
-                                    st.markdown(f"📄 [PAN Verified]({c['pan_file']})")
-                                if c.get("bank_file"):
-                                    st.markdown(f"📄 [Bank Proof Verified]({c['bank_file']})")
+                    st.write("---")
+                    st.write("##### 5. Rejection & Correction Remarks (If Any)")
+                    sup_reject_remarks = st.text_area("Supervisor Rejection / Correction Notes (Required only if rejecting)", key=f"sup_rej_note_{c['id']}")
 
-                            if st.form_submit_button("Verify & Forward to Admin", type="primary"):
-                                supabase.table("employees").update({
-                                "employee_code": s_code,
-                                "user_id": s_uid,
-                                "password": s_pwd,
-                                "entity_id": target_ent_id,
-                                "client_id": target_cli_id,
-                                "department": s_dept,
-                                "zone": s_zone,
-                                "category": s_cat,
-                                "designation": s_desig,
-                                "ot_rate_per_hour": s_ot if s_ot > 0 else None,
-                                
-                                # 👇 He navin add zalele 3 fields
-                                "shift_timing": s_shift,
-                                "weekly_off_day": s_wo,
-                                "joining_date": str(s_join_date),
-                                
-                                "status": "PENDING_ADMIN",
-                                "admin_remarks": None
+                    btn_col1, btn_col2 = st.columns(2)
+                    btn_sup_approve = btn_col1.form_submit_button("Verify & Forward to Admin", type="primary")
+                    btn_sup_reject = btn_col2.form_submit_button("Reject / Send Back")
+
+                    if btn_sup_approve:
+                        supabase.table("employees").update({
+                            "employee_code": s_code,
+                            "user_id": s_uid,
+                            "password": s_pwd,
+                            "entity_id": target_ent_id,
+                            "client_id": target_cli_id,
+                            "department": s_dept,
+                            "zone": s_zone,
+                            "category": s_cat,
+                            "designation": s_desig,
+                            "ot_rate_per_hour": s_ot if s_ot > 0 else None,
+                            "shift_timing": s_shift,
+                            "weekly_off_day": s_wo,
+                            "joining_date": str(s_join_date),
+                            "status": "PENDING_ADMIN",
+                            "admin_remarks": None
+                        }).eq("id", c["id"]).execute()
+
+                        st.toast("✅ Candidate verified and forwarded to Admin!")
+                        st.success("Candidate details updated and sent to Admin.")
+                        pytime.sleep(1)
+                        st.rerun()
+
+                    if btn_sup_reject:
+                        if not sup_reject_remarks.strip():
+                            st.error("Please enter rejection / correction remarks before rejecting!")
+                        else:
+                            supabase.table("employees").update({
+                                "status": "REJECTED_BY_SUPERVISOR",
+                                "admin_remarks": sup_reject_remarks.strip()
                             }).eq("id", c["id"]).execute()
-
-                            st.toast("✅ Candidate verified and forwarded to Admin!")
-                            st.success("Candidate details updated and sent to Admin for final activation.")
+                            st.toast("Candidate application rejected!")
+                            st.warning("Application marked as rejected.")
                             pytime.sleep(1)
                             st.rerun()
             else:
