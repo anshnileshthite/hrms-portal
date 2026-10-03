@@ -1246,7 +1246,7 @@ else:
                     sel_emp_to_edit = st.selectbox("Select Employee to Update *", list(emp_opt_map.keys()))
                     curr_emp = emp_opt_map.get(sel_emp_to_edit)
 
-                    # 👇 हा सेफ्टी चेक AttributeError १००% रोखेल
+                    # 👇 हा सेफ्टी चेक AttributeError १००% रोखेल आणि एरर येऊ देणार नाही
                     if not curr_emp:
                         st.info("Krupaya eka valid employee la select kara.")
                         st.stop()
@@ -1255,7 +1255,6 @@ else:
                         st.write("##### 1. Login Details")
                         u1, u2, u3 = st.columns(3)
                         ue_code = u1.text_input("Employee Code", value=curr_emp.get("employee_code", "")).strip().upper()
-                        # ... उरलेला फॉर्मचा कोड तसाच राहील
                         ue_uid = u2.text_input("User ID", value=curr_emp.get("user_id", ""))
                         ue_pwd = u3.text_input("Portal Password", value=curr_emp.get("password", ""))
 
