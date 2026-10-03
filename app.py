@@ -3879,21 +3879,22 @@ else:
             
             doc_col1, doc_col2 = st.columns(2)
             with doc_col1:
-                st.markdown("""
-                <div style="background:#EFF6FF; border:1px solid #BFDBFE; padding:15px; border-radius:6px;">
-                    <b>Official Appointment / Offer Letter</b><br/>
-                    <small>Issued upon successful onboarding and background verification.</small><br/><br/>
-                    📄 <b>Download Offer Letter (PDF)</b>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("##### Official Appointment / Offer Letter")
+                st.caption("Issued upon successful onboarding and background verification.")
+                offer_url = emp_user.get("offer_file")
+                if offer_url:
+                    st.markdown(f'<a href="{offer_url}" target="_blank" style="display:inline-block; background-color:#1E3A8A; color:white; padding:8px 14px; border-radius:4px; text-decoration:none; font-weight:bold; margin-top:10px;">Download Offer Letter (PDF)</a>', unsafe_allow_html=True)
+                else:
+                    st.warning("Offer letter ajun upload zalele nahiye. Admin kade samparka kara.")
+
             with doc_col2:
-                st.markdown("""
-                <div style="background:#F0FDF4; border:1px solid #BBF7D0; padding:15px; border-radius:6px;">
-                    <b>ESIC Insurance & Medical Card</b><br/>
-                    <small>Official social security and medical benefit document.</small><br/><br/>
-                    📄 <b>Download ESIC E-Card (PDF)</b>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("##### ESIC Insurance & Medical Card")
+                st.caption("Official social security and medical benefit document.")
+                esic_url = emp_user.get("esic_file")
+                if esic_url:
+                    st.markdown(f'<a href="{esic_url}" target="_blank" style="display:inline-block; background-color:#059669; color:white; padding:8px 14px; border-radius:4px; text-decoration:none; font-weight:bold; margin-top:10px;">Download ESIC E-Card (PDF)</a>', unsafe_allow_html=True)
+                else:
+                    st.warning("ESIC document ajun upload zalele nahiye.")
 
         # EMPLOYEE PANEL 8: REQUEST PPE EQUIPMENT
         elif selected_emp_panel == "Request PPE Equipment":
