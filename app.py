@@ -7,13 +7,6 @@ import math
 import re
 import time as pytime
 from datetime import date, datetime, time, timedelta
-# Onboarding form madhe date_input vapratana he range taka:
-dob = st.date_input(
-    "Date of Birth (DOB) *",
-    value=date(1995, 1, 1),
-    min_value=date(1940, 1, 1),
-    max_value=date.today()
-)
 from database import supabase
 
 # ReportLab Libraries for PDF Generation
@@ -3989,7 +3982,7 @@ else:
                         <td><b>Date of Joining:</b> {emp_user.get('joining_date', '2026-01-01')}</td>
                     </tr>
                     <tr>
-                        <td><b>Date of Birth (DOB):</b> {emp_user.get('dob', '1995-05-15')}</td>
+                        <td><b>Date of Birth (DOB):</b> {emp_user.get('dob', '1940-05-15')}</td>
                         <td><b>Mobile Number:</b> {emp_user.get('phone_number', 'N/A')}</td>
                     </tr>
                     <tr>
