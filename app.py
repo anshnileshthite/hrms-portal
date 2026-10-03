@@ -380,6 +380,23 @@ I hereby accept the above offer and agree to join <b>""" + entity_name + """</b>
 Employee Name: <b>""" + str(emp_data.get('full_name')) + """</b><br/><br/>
 Signature: ___________________________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ___________________
 """
+# 👈 स्टॅम्प आणि सही जोडण्यासाठी हा कोड टाका
+    stamp_f, sig_f = get_entity_assets(code_pref)
+    sign_elements = [Paragraph(f"<b>For {entity_name}</b>", ParagraphStyle(name="SignTop", alignment=1))]
+    if stamp_f and sig_f:
+        sign_elements.append(Spacer(1, 4))
+        sign_elements.append(Table([[RLImage(stamp_f, width=55, height=55), RLImage(sig_f, width=80, height=40)]], colWidths=[65, 95]))
+    elif stamp_f:
+        sign_elements.append(Spacer(1, 4))
+        sign_elements.append(RLImage(stamp_f, width=60, height=60))
+    elif sig_f:
+        sign_elements.append(Spacer(1, 10))
+        sign_elements.append(RLImage(sig_f, width=90, height=45))
+    else:
+        sign_elements.append(Spacer(1, 35))
+
+    sign_elements.append(Paragraph("<b>Authorized Signatory</b>", ParagraphStyle(name="SignBottom", alignment=1)))
+
     story.append(Paragraph(p2_text, styles["Normal"]))
     doc.build(story, onFirstPage=draw_fixed_footer, onLaterPages=draw_fixed_footer)
     buffer.seek(0)
@@ -2192,9 +2209,7 @@ else:
 
                     pf_ded = 1800.0 if basic_plus_da > 15000 else round(basic_plus_da * 0.12, 2)
                     esic_ded = round(gross_amount * 0.0075, 2)
-                    mlwf_ee = 0.0
-                    pt_ded = float(sal_struct.get("pt_amount", 200.0) if sal_struct else 200.0) if gross_amount > 10000 else 0.0
-                    
+                    mlwf_ee = 0.0                    
                     adv_val = 0.0
                     try:
                         adv_recs = supabase.table("advance_salaries").select("amount").eq("employee_id", emp_item["id"]).eq("status", "APPROVED").execute().data or []
@@ -2232,7 +2247,7 @@ else:
                         "Joining Date": emp_item.get("joining_date", "2026-01-01"),
                         "UAN No": emp_item.get("uan_number", "N/A"),
                         "ESIC No": emp_item.get("esic_number", "N/A"),
-                        "Adhar No": "[Aadhaar Redacted]",
+                        "Adhar No": emp_item.get("adhar_number", "N/A"),
                         "Contract Name": sel_ent_name,
                         "Department": emp_item.get("department", "Facility"),
                         "Category": emp_item.get("category", "Semiskilled"),
@@ -2270,6 +2285,13 @@ else:
                         "SGST": sgst_9,
                         "BILLING AMT": grand_billing_amt
                     })
+                    pf_ded = 1800.0 if basic_plus_da > 15000 else round(basic_plus_da * 0.12, 2)
+                    esic_ded = round(gross_amount * 0.0075, 2)
+                    mlwf_ee = 0.0
+                    
+                    # 👈 हा कोड ठिक इथे टाका (या आधीचा pt_ded काढू नका, त्याला या नवीन ओळीने रिप्लेस करा)
+                    emp_gender = str(emp_item.get("gender", "")).strip().capitalize()
+                    pt_ded = 0.0 if emp_gender == "Female" else (float(sal_struct.get("pt_amount", 200.0) if sal_struct else 200.0) if gross_amount > 10000 else 0.0)
 
                 df_wage_43 = pd.DataFrame(payroll_rows)
                 st.dataframe(df_wage_43, use_container_width=True)
