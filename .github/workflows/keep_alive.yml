@@ -9,12 +9,6 @@ jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase via Curl
-        run: |
-          curl -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/" \
-          -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
-          
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -42,7 +36,6 @@ jobs:
               print("Error: SUPABASE_URL or SUPABASE_KEY is missing in GitHub Secrets!")
               exit(1)
 
-          # Ensure URL has proper scheme
           if not base_url.startswith("http://") and not base_url.startswith("https://"):
               base_url = "https://" + base_url
 
@@ -59,7 +52,7 @@ jobs:
           try:
               res = requests.get(target_url, headers=headers, timeout=15)
               print(f"Response Status Code: {res.status_code}")
-              if res.status_code in [200, 401, 403]: # 401/403 means Supabase server is awake and responding
+              if res.status_code in [200, 401, 403]:
                   print("Success: Supabase project is active and alive!")
               else:
                   print(f"Server responded with code: {res.status_code}, message: {res.text}")
