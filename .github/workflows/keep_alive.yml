@@ -25,26 +25,35 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          python -c "
-          import os, requests
+          python3 - <<'EOF'
+          import os
+          import requests
+
           base_url = os.environ.get('SUPABASE_URL')
           key = os.environ.get('SUPABASE_KEY')
-          
+
           if not base_url or not key:
-              print('Error: Secrets are missing!')
+              print("Error: Environment variables SUPABASE_URL or SUPABASE_KEY are missing!")
               exit(1)
-              
-          url = base_url.rstrip('/') + '/rest/v1/entities?select=id&limit=1'
+
+          # Clean trailing slashes to prevent malformed URL
+          clean_url = base_url.strip().rstrip('/')
+          target_url = f"{clean_url}/rest/v1/entities?select=id&limit=1"
+
           headers = {
-              'apikey': key, 
-              'Authorization': 'Bearer ' + key
+              'apikey': key,
+              'Authorization': f'Bearer {key}'
           }
-          
-          res = requests.get(url, headers=headers)
-          print('Response Status Code:', res.status_code)
-          if res.status_code == 200:
-              print('Successfully pinged Supabase database!')
-          else:
-              print('Failed response:', res.text)
+
+          try:
+              res = requests.get(target_url, headers=headers, timeout=10)
+              print(f"Response Status Code: {res.status_code}")
+              if res.status_code == 200:
+                  print("Successfully pinged Supabase database!")
+              else:
+                  print(f"Failed response: {res.text}")
+                  exit(1)
+          except Exception as e:
+              print(f"Connection error: {e}")
               exit(1)
-          "
+          EOF
